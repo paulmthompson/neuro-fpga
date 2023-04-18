@@ -2,3 +2,13 @@
 **/_xmsgs
 **/iseconfig
 **/*.gise
+**/xst
+
+**/*.cmd_log
+**/*.lso
+**/*.prj
+**/*.syr 
+**/*.xst 
+**/*.html 
+**/*.xrpt
+**/*.xml 
