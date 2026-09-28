@@ -3266,42 +3266,42 @@ module main #(
 	wire [31:0] triggers;
 	assign triggers = { manual_triggers[7:0], ADC_triggers, TTL_in };
 	
-	stim_sequencer #(0) stim_sequencer_A1 (.reset(reset), .dataclk(dataclk), .main_state(main_state), .channel(channel),
+	stim_sequencer #(0) stim_sequencer_A1 (.reset(reset), .dataclk(dataclk), .ti_clk(ti_clk), .main_state(main_state), .channel(channel),
 		.prog_channel(prog_channel), .prog_address(prog_address), .prog_module(prog_module), .prog_word(prog_word), .prog_trig(prog_trig),
 		.triggers(triggers), .stim_on(stim_on_A1), .stim_pol(stim_pol_A1), .amp_settle(amp_settle_A1_pre), .charge_recov(charge_recov_A1),
 		.amp_settle_changed(amp_settle_changed_A1_pre), .reset_sequencer(reset_sequencers));
 
-	stim_sequencer #(1) stim_sequencer_A2 (.reset(reset), .dataclk(dataclk), .main_state(main_state), .channel(channel),
+	stim_sequencer #(1) stim_sequencer_A2 (.reset(reset), .dataclk(dataclk), .ti_clk(ti_clk), .main_state(main_state), .channel(channel),
 		.prog_channel(prog_channel), .prog_address(prog_address), .prog_module(prog_module), .prog_word(prog_word), .prog_trig(prog_trig),
 		.triggers(triggers), .stim_on(stim_on_A2), .stim_pol(stim_pol_A2), .amp_settle(amp_settle_A2_pre), .charge_recov(charge_recov_A2),
 		.amp_settle_changed(amp_settle_changed_A2_pre), .reset_sequencer(reset_sequencers));
 		
-	stim_sequencer #(2) stim_sequencer_B1 (.reset(reset), .dataclk(dataclk), .main_state(main_state), .channel(channel),
+	stim_sequencer #(2) stim_sequencer_B1 (.reset(reset), .dataclk(dataclk), .ti_clk(ti_clk), .main_state(main_state), .channel(channel),
 		.prog_channel(prog_channel), .prog_address(prog_address), .prog_module(prog_module), .prog_word(prog_word), .prog_trig(prog_trig),
 		.triggers(triggers), .stim_on(stim_on_B1), .stim_pol(stim_pol_B1), .amp_settle(amp_settle_B1_pre), .charge_recov(charge_recov_B1),
 		.amp_settle_changed(amp_settle_changed_B1_pre), .reset_sequencer(reset_sequencers));
 		
-	stim_sequencer #(3) stim_sequencer_B2 (.reset(reset), .dataclk(dataclk), .main_state(main_state), .channel(channel),
+	stim_sequencer #(3) stim_sequencer_B2 (.reset(reset), .dataclk(dataclk), .ti_clk(ti_clk), .main_state(main_state), .channel(channel),
 		.prog_channel(prog_channel), .prog_address(prog_address), .prog_module(prog_module), .prog_word(prog_word), .prog_trig(prog_trig),
 		.triggers(triggers), .stim_on(stim_on_B2), .stim_pol(stim_pol_B2), .amp_settle(amp_settle_B2_pre), .charge_recov(charge_recov_B2),
 		.amp_settle_changed(amp_settle_changed_B2_pre), .reset_sequencer(reset_sequencers));
 		
-	stim_sequencer #(4) stim_sequencer_C1 (.reset(reset), .dataclk(dataclk), .main_state(main_state), .channel(channel),
+	stim_sequencer #(4) stim_sequencer_C1 (.reset(reset), .dataclk(dataclk), .ti_clk(ti_clk), .main_state(main_state), .channel(channel),
 		.prog_channel(prog_channel), .prog_address(prog_address), .prog_module(prog_module), .prog_word(prog_word), .prog_trig(prog_trig),
 		.triggers(triggers), .stim_on(stim_on_C1), .stim_pol(stim_pol_C1), .amp_settle(amp_settle_C1_pre), .charge_recov(charge_recov_C1),
 		.amp_settle_changed(amp_settle_changed_C1_pre), .reset_sequencer(reset_sequencers));
 		
-	stim_sequencer #(5) stim_sequencer_C2 (.reset(reset), .dataclk(dataclk), .main_state(main_state), .channel(channel),
+	stim_sequencer #(5) stim_sequencer_C2 (.reset(reset), .dataclk(dataclk), .ti_clk(ti_clk), .main_state(main_state), .channel(channel),
 		.prog_channel(prog_channel), .prog_address(prog_address), .prog_module(prog_module), .prog_word(prog_word), .prog_trig(prog_trig),
 		.triggers(triggers), .stim_on(stim_on_C2), .stim_pol(stim_pol_C2), .amp_settle(amp_settle_C2_pre), .charge_recov(charge_recov_C2),
 		.amp_settle_changed(amp_settle_changed_C2_pre), .reset_sequencer(reset_sequencers));
 		
-	stim_sequencer #(6) stim_sequencer_D1 (.reset(reset), .dataclk(dataclk), .main_state(main_state), .channel(channel),
+	stim_sequencer #(6) stim_sequencer_D1 (.reset(reset), .dataclk(dataclk), .ti_clk(ti_clk), .main_state(main_state), .channel(channel),
 		.prog_channel(prog_channel), .prog_address(prog_address), .prog_module(prog_module), .prog_word(prog_word), .prog_trig(prog_trig),
 		.triggers(triggers), .stim_on(stim_on_D1), .stim_pol(stim_pol_D1), .amp_settle(amp_settle_D1_pre), .charge_recov(charge_recov_D1),
 		.amp_settle_changed(amp_settle_changed_D1_pre), .reset_sequencer(reset_sequencers));
 		
-	stim_sequencer #(7) stim_sequencer_D2 (.reset(reset), .dataclk(dataclk), .main_state(main_state), .channel(channel),
+	stim_sequencer #(7) stim_sequencer_D2 (.reset(reset), .dataclk(dataclk), .ti_clk(ti_clk), .main_state(main_state), .channel(channel),
 		.prog_channel(prog_channel), .prog_address(prog_address), .prog_module(prog_module), .prog_word(prog_word), .prog_trig(prog_trig),
 		.triggers(triggers), .stim_on(stim_on_D2), .stim_pol(stim_pol_D2), .amp_settle(amp_settle_D2_pre), .charge_recov(charge_recov_D2),
 		.amp_settle_changed(amp_settle_changed_D2_pre), .reset_sequencer(reset_sequencers));
