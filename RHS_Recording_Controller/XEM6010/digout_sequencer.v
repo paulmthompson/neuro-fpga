@@ -34,6 +34,7 @@ module digout_sequencer #(
 	output reg [15:0] digout,
 	output wire [15:0] digout_enabled,
 	input wire			shutdown,
+	input wire			amp_maintenance,
 	input wire			reset_sequencer
    );
 
@@ -112,6 +113,8 @@ module digout_sequencer #(
 			digout <= 16'b0;
 			waiting_for_trigger <=16'hffff;
 			waiting_for_edge <=16'hffff;
+		end else if (amp_maintenance) begin
+			digout <= 16'b0;
 		end else begin
 			if (channel[5:4] == 2'b00) begin // only for channel = 0-15
 				case (main_state)
@@ -156,7 +159,7 @@ module digout_sequencer #(
 					end
 					
 					114: begin
-						if (shutdown) begin
+						if (shutdown || amp_maintenance) begin
 							digout[addr] <= 1'b0;
 						end
 					end

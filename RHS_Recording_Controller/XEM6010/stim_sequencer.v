@@ -33,6 +33,7 @@ module stim_sequencer #(
 	input wire [31:0] prog_word,
 	input wire			prog_trig,
 	input wire [31:0] triggers,
+	input wire			amp_maintenance,
 	output reg [15:0] stim_on,
 	output reg [15:0] stim_pol,
 	output reg [15:0] amp_settle,
@@ -148,6 +149,12 @@ module stim_sequencer #(
 			amp_settle_changed <= 1'b1;
 			waiting_for_trigger <=16'hffff;
 			waiting_for_edge <=16'hffff;
+		end else if (amp_maintenance) begin
+			// docs/amp-maintenance-mode.md §3.5: hold sequencers; deassert stim outputs
+			stim_on <= 16'b0;
+			stim_pol <= 16'b0;
+			amp_settle <= 16'b0;
+			charge_recov <= 16'b0;
 		end else begin
 			if (channel[5:4] == 2'b00) begin
 				// Latch BRAM read data (1-cycle latency after address on prior state)

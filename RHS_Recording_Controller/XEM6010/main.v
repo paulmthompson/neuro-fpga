@@ -402,6 +402,7 @@ module main #(
 
 	reg [31:0] 		aux_cmd;
 	reg [12:0] 		aux_cmd_index_1, aux_cmd_index_2, aux_cmd_index_3, aux_cmd_index_4;
+	reg				aux_execute_prev;
 	reg [12:0] 		max_aux_cmd_index_1_in, max_aux_cmd_index_2_in, max_aux_cmd_index_3_in, max_aux_cmd_index_4_in;
 	reg [12:0] 		max_aux_cmd_index_1, max_aux_cmd_index_2, max_aux_cmd_index_3, max_aux_cmd_index_4;
 	reg [12:0]		loop_aux_cmd_index_1, loop_aux_cmd_index_2, loop_aux_cmd_index_3, loop_aux_cmd_index_4;
@@ -470,6 +471,8 @@ module main #(
 	wire [15:0] pipe_in_data_1_LSW, pipe_in_data_2_LSW, pipe_in_data_3_LSW, pipe_in_data_4_LSW;
 
 	wire stim_cmd_en, prog_trig;
+	wire amp_maintenance, aux_execute;
+	wire aux_cmd_active, aux_index_advance;
 	wire [3:0] prog_channel, prog_address;
 	wire [4:0] prog_module;
 	wire [31:0] prog_word; // PMT - make 32 bit
@@ -501,6 +504,23 @@ module main #(
 	assign delay_D = 						ep04wirein[15:12];
 	
 	assign stim_cmd_en = 				ep05wirein[0];
+
+	// 2-stage synchronizer for host control bits crossing from okHostClk to dataclk
+	(* ASYNC_REG = "TRUE" *) reg amp_maintenance_sync1, amp_maintenance_sync;
+	(* ASYNC_REG = "TRUE" *) reg aux_execute_sync1, aux_execute_sync;
+
+	always @(posedge dataclk) begin
+		amp_maintenance_sync1 <= ep05wirein[1];
+		amp_maintenance_sync  <= amp_maintenance_sync1;
+		aux_execute_sync1     <= ep05wirein[2];
+		aux_execute_sync      <= aux_execute_sync1;
+	end
+
+	assign amp_maintenance = 			amp_maintenance_sync;
+	assign aux_execute = 				aux_execute_sync;
+
+	assign aux_cmd_active = 			~shutdown & (~amp_maintenance | aux_execute);
+	assign aux_index_advance = 			~shutdown & (~amp_maintenance | aux_execute);
 			
 	assign prog_address = 				ep06wirein[3:0];
 	assign prog_channel = 				ep06wirein[7:4];
@@ -959,48 +979,56 @@ module main #(
 	command_selector_stim command_selector_stim_A1 (
 		.channel(channel), .shutdown(shutdown), .DSP_settle(DSP_settle), .amp_settle_mode(amp_settle_mode), .charge_recov_mode(charge_recov_mode),
 		.aux_cmd(aux_cmd), .use_aux_cmd(aux_enable_A1), .DC_amp_convert(DC_amp_convert), .stim_en(stim_cmd_en),
+		.amp_maintenance(amp_maintenance),
 		.stim_on(stim_on_A1), .stim_pol(stim_pol_A1), .charge_recov(charge_recov_A1), .amp_settle(amp_settle_A1),
 		.amp_settle_changed(amp_settle_changed_A1), .MOSI_cmd(MOSI_cmd_selected_A1));	
 	
 	command_selector_stim command_selector_stim_A2 (
 		.channel(channel), .shutdown(shutdown), .DSP_settle(DSP_settle), .amp_settle_mode(amp_settle_mode), .charge_recov_mode(charge_recov_mode),
 		.aux_cmd(aux_cmd), .use_aux_cmd(aux_enable_A2), .DC_amp_convert(DC_amp_convert), .stim_en(stim_cmd_en),
+		.amp_maintenance(amp_maintenance),
 		.stim_on(stim_on_A2), .stim_pol(stim_pol_A2), .charge_recov(charge_recov_A2), .amp_settle(amp_settle_A2),
 		.amp_settle_changed(amp_settle_changed_A2), .MOSI_cmd(MOSI_cmd_selected_A2));	
 
 	command_selector_stim command_selector_stim_B1 (
 		.channel(channel), .shutdown(shutdown), .DSP_settle(DSP_settle), .amp_settle_mode(amp_settle_mode), .charge_recov_mode(charge_recov_mode),
 		.aux_cmd(aux_cmd), .use_aux_cmd(aux_enable_B1), .DC_amp_convert(DC_amp_convert), .stim_en(stim_cmd_en),
+		.amp_maintenance(amp_maintenance),
 		.stim_on(stim_on_B1), .stim_pol(stim_pol_B1), .charge_recov(charge_recov_B1), .amp_settle(amp_settle_B1),
 		.amp_settle_changed(amp_settle_changed_B1), .MOSI_cmd(MOSI_cmd_selected_B1));	
 	
 	command_selector_stim command_selector_stim_B2 (
 		.channel(channel), .shutdown(shutdown), .DSP_settle(DSP_settle), .amp_settle_mode(amp_settle_mode), .charge_recov_mode(charge_recov_mode),
 		.aux_cmd(aux_cmd), .use_aux_cmd(aux_enable_B2), .DC_amp_convert(DC_amp_convert), .stim_en(stim_cmd_en),
+		.amp_maintenance(amp_maintenance),
 		.stim_on(stim_on_B2), .stim_pol(stim_pol_B2), .charge_recov(charge_recov_B2), .amp_settle(amp_settle_B2),
 		.amp_settle_changed(amp_settle_changed_B2), .MOSI_cmd(MOSI_cmd_selected_B2));	
 
 	command_selector_stim command_selector_stim_C1 (
 		.channel(channel), .shutdown(shutdown), .DSP_settle(DSP_settle), .amp_settle_mode(amp_settle_mode), .charge_recov_mode(charge_recov_mode),
 		.aux_cmd(aux_cmd), .use_aux_cmd(aux_enable_C1), .DC_amp_convert(DC_amp_convert), .stim_en(stim_cmd_en),
+		.amp_maintenance(amp_maintenance),
 		.stim_on(stim_on_C1), .stim_pol(stim_pol_C1), .charge_recov(charge_recov_C1), .amp_settle(amp_settle_C1),
 		.amp_settle_changed(amp_settle_changed_C1), .MOSI_cmd(MOSI_cmd_selected_C1));	
 	
 	command_selector_stim command_selector_stim_C2 (
 		.channel(channel), .shutdown(shutdown), .DSP_settle(DSP_settle), .amp_settle_mode(amp_settle_mode), .charge_recov_mode(charge_recov_mode),
 		.aux_cmd(aux_cmd), .use_aux_cmd(aux_enable_C2), .DC_amp_convert(DC_amp_convert), .stim_en(stim_cmd_en),
+		.amp_maintenance(amp_maintenance),
 		.stim_on(stim_on_C2), .stim_pol(stim_pol_C2), .charge_recov(charge_recov_C2), .amp_settle(amp_settle_C2),
 		.amp_settle_changed(amp_settle_changed_C2), .MOSI_cmd(MOSI_cmd_selected_C2));	
 
 	command_selector_stim command_selector_stim_D1 (
 		.channel(channel), .shutdown(shutdown), .DSP_settle(DSP_settle), .amp_settle_mode(amp_settle_mode), .charge_recov_mode(charge_recov_mode),
 		.aux_cmd(aux_cmd), .use_aux_cmd(aux_enable_D1), .DC_amp_convert(DC_amp_convert), .stim_en(stim_cmd_en),
+		.amp_maintenance(amp_maintenance),
 		.stim_on(stim_on_D1), .stim_pol(stim_pol_D1), .charge_recov(charge_recov_D1), .amp_settle(amp_settle_D1),
 		.amp_settle_changed(amp_settle_changed_D1), .MOSI_cmd(MOSI_cmd_selected_D1));	
 	
 	command_selector_stim command_selector_stim_D2 (
 		.channel(channel), .shutdown(shutdown), .DSP_settle(DSP_settle), .amp_settle_mode(amp_settle_mode), .charge_recov_mode(charge_recov_mode),
 		.aux_cmd(aux_cmd), .use_aux_cmd(aux_enable_D2), .DC_amp_convert(DC_amp_convert), .stim_en(stim_cmd_en),
+		.amp_maintenance(amp_maintenance),
 		.stim_on(stim_on_D2), .stim_pol(stim_pol_D2), .charge_recov(charge_recov_D2), .amp_settle(amp_settle_D2),
 		.amp_settle_changed(amp_settle_changed_D2), .MOSI_cmd(MOSI_cmd_selected_D2));	
 
@@ -1181,6 +1209,19 @@ module main #(
 			FIFO_data_in <= 16'b0;
 			FIFO_write_to <= 1'b0;
 
+			// Gotcha A: reset aux_cmd_index_* and latch max_aux_cmd_index_* on rising edge of aux_execute
+			aux_execute_prev <= aux_execute;
+			if (amp_maintenance && aux_execute && !aux_execute_prev) begin
+				aux_cmd_index_1 <= loop_aux_cmd_index_1;
+				aux_cmd_index_2 <= loop_aux_cmd_index_2;
+				aux_cmd_index_3 <= loop_aux_cmd_index_3;
+				aux_cmd_index_4 <= loop_aux_cmd_index_4;
+				max_aux_cmd_index_1 <= max_aux_cmd_index_1_in;
+				max_aux_cmd_index_2 <= max_aux_cmd_index_2_in;
+				max_aux_cmd_index_3 <= max_aux_cmd_index_3_in;
+				max_aux_cmd_index_4 <= max_aux_cmd_index_4_in;
+			end
+
 			case (main_state)
 			
 				ms_wait: begin
@@ -1295,13 +1336,13 @@ module main #(
 
 				ms_clk1_b: begin
 					// Note: After selecting a new RAM_addr_rd, we must wait two clock cycles before reading from the RAM
-					if (channel == 15 && ~shutdown) begin
+					if (channel == 15 && aux_cmd_active) begin
 						RAM_addr_rd <= aux_cmd_index_1;
-					end else if (channel == 16 && ~shutdown) begin
+					end else if (channel == 16 && aux_cmd_active) begin
 						RAM_addr_rd <= aux_cmd_index_2;
-					end else if (channel == 17 && ~shutdown) begin
+					end else if (channel == 17 && aux_cmd_active) begin
 						RAM_addr_rd <= aux_cmd_index_3;
-					end else if (channel == 18 && ~shutdown) begin
+					end else if (channel == 18 && aux_cmd_active) begin
 						RAM_addr_rd <= aux_cmd_index_4;
 					end
 
@@ -1328,14 +1369,14 @@ module main #(
 				end
 				
 				ms_clk1_d: begin
-					if (channel == 15 && ~shutdown) begin
-						aux_cmd <= {RAM_data_out_1_MSW, RAM_data_out_1_LSW};
-					end else if (channel == 16 && ~shutdown) begin
-						aux_cmd <= {RAM_data_out_2_MSW, RAM_data_out_2_LSW};
-					end else if (channel == 17 && ~shutdown) begin
-						aux_cmd <= {RAM_data_out_3_MSW, RAM_data_out_3_LSW};
-					end else if (channel == 18 && ~shutdown) begin
-						aux_cmd <= {RAM_data_out_4_MSW, RAM_data_out_4_LSW};
+					if (channel == 15) begin
+						aux_cmd <= aux_cmd_active ? {RAM_data_out_1_MSW, RAM_data_out_1_LSW} : { 2'b11, 2'b00, 4'b0000, 8'hff, 16'b0 };
+					end else if (channel == 16) begin
+						aux_cmd <= aux_cmd_active ? {RAM_data_out_2_MSW, RAM_data_out_2_LSW} : { 2'b11, 2'b00, 4'b0000, 8'hff, 16'b0 };
+					end else if (channel == 17) begin
+						aux_cmd <= aux_cmd_active ? {RAM_data_out_3_MSW, RAM_data_out_3_LSW} : { 2'b11, 2'b00, 4'b0000, 8'hff, 16'b0 };
+					end else if (channel == 18) begin
+						aux_cmd <= aux_cmd_active ? {RAM_data_out_4_MSW, RAM_data_out_4_LSW} : { 2'b11, 2'b00, 4'b0000, 8'hff, 16'b0 };
 					end
 
 					if (channel == 0 && ~shutdown) begin
@@ -3054,7 +3095,7 @@ module main #(
 				end
 				
 				ms_cs_h: begin
-					if (~shutdown) begin
+					if (aux_index_advance && !(amp_maintenance && aux_execute && !aux_execute_prev)) begin
 						if (channel == 19) begin
 							if (aux_cmd_index_1 == max_aux_cmd_index_1) begin
 								aux_cmd_index_1 <= loop_aux_cmd_index_1;
@@ -3268,42 +3309,42 @@ module main #(
 	
 	stim_sequencer #(0) stim_sequencer_A1 (.reset(reset), .dataclk(dataclk), .ti_clk(ti_clk), .main_state(main_state), .channel(channel),
 		.prog_channel(prog_channel), .prog_address(prog_address), .prog_module(prog_module), .prog_word(prog_word), .prog_trig(prog_trig),
-		.triggers(triggers), .stim_on(stim_on_A1), .stim_pol(stim_pol_A1), .amp_settle(amp_settle_A1_pre), .charge_recov(charge_recov_A1),
+		.triggers(triggers), .amp_maintenance(amp_maintenance), .stim_on(stim_on_A1), .stim_pol(stim_pol_A1), .amp_settle(amp_settle_A1_pre), .charge_recov(charge_recov_A1),
 		.amp_settle_changed(amp_settle_changed_A1_pre), .reset_sequencer(reset_sequencers));
 
 	stim_sequencer #(1) stim_sequencer_A2 (.reset(reset), .dataclk(dataclk), .ti_clk(ti_clk), .main_state(main_state), .channel(channel),
 		.prog_channel(prog_channel), .prog_address(prog_address), .prog_module(prog_module), .prog_word(prog_word), .prog_trig(prog_trig),
-		.triggers(triggers), .stim_on(stim_on_A2), .stim_pol(stim_pol_A2), .amp_settle(amp_settle_A2_pre), .charge_recov(charge_recov_A2),
+		.triggers(triggers), .amp_maintenance(amp_maintenance), .stim_on(stim_on_A2), .stim_pol(stim_pol_A2), .amp_settle(amp_settle_A2_pre), .charge_recov(charge_recov_A2),
 		.amp_settle_changed(amp_settle_changed_A2_pre), .reset_sequencer(reset_sequencers));
 		
 	stim_sequencer #(2) stim_sequencer_B1 (.reset(reset), .dataclk(dataclk), .ti_clk(ti_clk), .main_state(main_state), .channel(channel),
 		.prog_channel(prog_channel), .prog_address(prog_address), .prog_module(prog_module), .prog_word(prog_word), .prog_trig(prog_trig),
-		.triggers(triggers), .stim_on(stim_on_B1), .stim_pol(stim_pol_B1), .amp_settle(amp_settle_B1_pre), .charge_recov(charge_recov_B1),
+		.triggers(triggers), .amp_maintenance(amp_maintenance), .stim_on(stim_on_B1), .stim_pol(stim_pol_B1), .amp_settle(amp_settle_B1_pre), .charge_recov(charge_recov_B1),
 		.amp_settle_changed(amp_settle_changed_B1_pre), .reset_sequencer(reset_sequencers));
 		
 	stim_sequencer #(3) stim_sequencer_B2 (.reset(reset), .dataclk(dataclk), .ti_clk(ti_clk), .main_state(main_state), .channel(channel),
 		.prog_channel(prog_channel), .prog_address(prog_address), .prog_module(prog_module), .prog_word(prog_word), .prog_trig(prog_trig),
-		.triggers(triggers), .stim_on(stim_on_B2), .stim_pol(stim_pol_B2), .amp_settle(amp_settle_B2_pre), .charge_recov(charge_recov_B2),
+		.triggers(triggers), .amp_maintenance(amp_maintenance), .stim_on(stim_on_B2), .stim_pol(stim_pol_B2), .amp_settle(amp_settle_B2_pre), .charge_recov(charge_recov_B2),
 		.amp_settle_changed(amp_settle_changed_B2_pre), .reset_sequencer(reset_sequencers));
 		
 	stim_sequencer #(4) stim_sequencer_C1 (.reset(reset), .dataclk(dataclk), .ti_clk(ti_clk), .main_state(main_state), .channel(channel),
 		.prog_channel(prog_channel), .prog_address(prog_address), .prog_module(prog_module), .prog_word(prog_word), .prog_trig(prog_trig),
-		.triggers(triggers), .stim_on(stim_on_C1), .stim_pol(stim_pol_C1), .amp_settle(amp_settle_C1_pre), .charge_recov(charge_recov_C1),
+		.triggers(triggers), .amp_maintenance(amp_maintenance), .stim_on(stim_on_C1), .stim_pol(stim_pol_C1), .amp_settle(amp_settle_C1_pre), .charge_recov(charge_recov_C1),
 		.amp_settle_changed(amp_settle_changed_C1_pre), .reset_sequencer(reset_sequencers));
 		
 	stim_sequencer #(5) stim_sequencer_C2 (.reset(reset), .dataclk(dataclk), .ti_clk(ti_clk), .main_state(main_state), .channel(channel),
 		.prog_channel(prog_channel), .prog_address(prog_address), .prog_module(prog_module), .prog_word(prog_word), .prog_trig(prog_trig),
-		.triggers(triggers), .stim_on(stim_on_C2), .stim_pol(stim_pol_C2), .amp_settle(amp_settle_C2_pre), .charge_recov(charge_recov_C2),
+		.triggers(triggers), .amp_maintenance(amp_maintenance), .stim_on(stim_on_C2), .stim_pol(stim_pol_C2), .amp_settle(amp_settle_C2_pre), .charge_recov(charge_recov_C2),
 		.amp_settle_changed(amp_settle_changed_C2_pre), .reset_sequencer(reset_sequencers));
 		
 	stim_sequencer #(6) stim_sequencer_D1 (.reset(reset), .dataclk(dataclk), .ti_clk(ti_clk), .main_state(main_state), .channel(channel),
 		.prog_channel(prog_channel), .prog_address(prog_address), .prog_module(prog_module), .prog_word(prog_word), .prog_trig(prog_trig),
-		.triggers(triggers), .stim_on(stim_on_D1), .stim_pol(stim_pol_D1), .amp_settle(amp_settle_D1_pre), .charge_recov(charge_recov_D1),
+		.triggers(triggers), .amp_maintenance(amp_maintenance), .stim_on(stim_on_D1), .stim_pol(stim_pol_D1), .amp_settle(amp_settle_D1_pre), .charge_recov(charge_recov_D1),
 		.amp_settle_changed(amp_settle_changed_D1_pre), .reset_sequencer(reset_sequencers));
 		
 	stim_sequencer #(7) stim_sequencer_D2 (.reset(reset), .dataclk(dataclk), .ti_clk(ti_clk), .main_state(main_state), .channel(channel),
 		.prog_channel(prog_channel), .prog_address(prog_address), .prog_module(prog_module), .prog_word(prog_word), .prog_trig(prog_trig),
-		.triggers(triggers), .stim_on(stim_on_D2), .stim_pol(stim_pol_D2), .amp_settle(amp_settle_D2_pre), .charge_recov(charge_recov_D2),
+		.triggers(triggers), .amp_maintenance(amp_maintenance), .stim_on(stim_on_D2), .stim_pol(stim_pol_D2), .amp_settle(amp_settle_D2_pre), .charge_recov(charge_recov_D2),
 		.amp_settle_changed(amp_settle_changed_D2_pre), .reset_sequencer(reset_sequencers));
 		
 	wire [15:0] DAC_sequencer_1, DAC_sequencer_2, DAC_sequencer_3, DAC_sequencer_4;
@@ -3314,42 +3355,42 @@ module main #(
 	analog_out_sequencer #(8) analog_out_sequencer_1 (.reset(reset), .dataclk(dataclk), .main_state(main_state), .channel(channel),
 		.prog_address(prog_address), .prog_module(prog_module), .prog_word(prog_word), .prog_trig(prog_trig),
 		.triggers(triggers), .DAC_sequencer_en(DAC_sequencer_en_1), .DAC_out(DAC_sequencer_1), .shutdown(shutdown), 
-		.reset_sequencer(reset_sequencers));
+		.amp_maintenance(amp_maintenance), .reset_sequencer(reset_sequencers));
 		
 	analog_out_sequencer #(9) analog_out_sequencer_2 (.reset(reset), .dataclk(dataclk), .main_state(main_state), .channel(channel),
 		.prog_address(prog_address), .prog_module(prog_module), .prog_word(prog_word), .prog_trig(prog_trig),
 		.triggers(triggers), .DAC_sequencer_en(DAC_sequencer_en_2), .DAC_out(DAC_sequencer_2), .shutdown(shutdown), 
-		.reset_sequencer(reset_sequencers));
+		.amp_maintenance(amp_maintenance), .reset_sequencer(reset_sequencers));
 
 	analog_out_sequencer #(10) analog_out_sequencer_3 (.reset(reset), .dataclk(dataclk), .main_state(main_state), .channel(channel),
 		.prog_address(prog_address), .prog_module(prog_module), .prog_word(prog_word), .prog_trig(prog_trig),
 		.triggers(triggers), .DAC_sequencer_en(DAC_sequencer_en_3), .DAC_out(DAC_sequencer_3), .shutdown(shutdown), 
-		.reset_sequencer(reset_sequencers));
+		.amp_maintenance(amp_maintenance), .reset_sequencer(reset_sequencers));
 
 	analog_out_sequencer #(11) analog_out_sequencer_4 (.reset(reset), .dataclk(dataclk), .main_state(main_state), .channel(channel),
 		.prog_address(prog_address), .prog_module(prog_module), .prog_word(prog_word), .prog_trig(prog_trig),
 		.triggers(triggers), .DAC_sequencer_en(DAC_sequencer_en_4), .DAC_out(DAC_sequencer_4), .shutdown(shutdown), 
-		.reset_sequencer(reset_sequencers));
+		.amp_maintenance(amp_maintenance), .reset_sequencer(reset_sequencers));
 
 	analog_out_sequencer #(12) analog_out_sequencer_5 (.reset(reset), .dataclk(dataclk), .main_state(main_state), .channel(channel),
 		.prog_address(prog_address), .prog_module(prog_module), .prog_word(prog_word), .prog_trig(prog_trig),
 		.triggers(triggers), .DAC_sequencer_en(DAC_sequencer_en_5), .DAC_out(DAC_sequencer_5), .shutdown(shutdown), 
-		.reset_sequencer(reset_sequencers));
+		.amp_maintenance(amp_maintenance), .reset_sequencer(reset_sequencers));
 
 	analog_out_sequencer #(13) analog_out_sequencer_6 (.reset(reset), .dataclk(dataclk), .main_state(main_state), .channel(channel),
 		.prog_address(prog_address), .prog_module(prog_module), .prog_word(prog_word), .prog_trig(prog_trig),
 		.triggers(triggers), .DAC_sequencer_en(DAC_sequencer_en_6), .DAC_out(DAC_sequencer_6), .shutdown(shutdown), 
-		.reset_sequencer(reset_sequencers));
+		.amp_maintenance(amp_maintenance), .reset_sequencer(reset_sequencers));
 
 	analog_out_sequencer #(14) analog_out_sequencer_7 (.reset(reset), .dataclk(dataclk), .main_state(main_state), .channel(channel),
 		.prog_address(prog_address), .prog_module(prog_module), .prog_word(prog_word), .prog_trig(prog_trig),
 		.triggers(triggers), .DAC_sequencer_en(DAC_sequencer_en_7), .DAC_out(DAC_sequencer_7), .shutdown(shutdown), 
-		.reset_sequencer(reset_sequencers));
+		.amp_maintenance(amp_maintenance), .reset_sequencer(reset_sequencers));
 
 	analog_out_sequencer #(15) analog_out_sequencer_8 (.reset(reset), .dataclk(dataclk), .main_state(main_state), .channel(channel),
 		.prog_address(prog_address), .prog_module(prog_module), .prog_word(prog_word), .prog_trig(prog_trig),
 		.triggers(triggers), .DAC_sequencer_en(DAC_sequencer_en_8), .DAC_out(DAC_sequencer_8), .shutdown(shutdown), 
-		.reset_sequencer(reset_sequencers));
+		.amp_maintenance(amp_maintenance), .reset_sequencer(reset_sequencers));
 
 	
 	wire [15:0] digout_sequencer, digout_sequencer_enabled, TTL_out_DAC_thresh;
@@ -3357,7 +3398,7 @@ module main #(
 	digout_sequencer #(16) digout_sequencer_1 (.reset(reset), .dataclk(dataclk), .main_state(main_state), .channel(channel),
 		.prog_channel(prog_channel), .prog_address(prog_address), .prog_module(prog_module), .prog_word(prog_word), .prog_trig(prog_trig),
 		.triggers(triggers), .digout(digout_sequencer), .digout_enabled(digout_sequencer_enabled), .shutdown(shutdown),
-		.reset_sequencer(reset_sequencers));
+		.amp_maintenance(amp_maintenance), .reset_sequencer(reset_sequencers));
 	
 	assign TTL_out_DAC_thresh = { 8'b00000000, DAC_thresh_out };
 	
@@ -3829,14 +3870,14 @@ module main #(
 	MISO_phase_selector MISO_phase_selector_8 (
 		.phase_select(delay_D), .MISO4x(in4x_D2), .MISO(in_D2));	
 
-	assign data_stream_1 = result_A1;
-	assign data_stream_2 = result_A2;
-	assign data_stream_3 = result_B1;
-	assign data_stream_4 = result_B2;
-	assign data_stream_5 = result_C1;
-	assign data_stream_6 = result_C2;
-	assign data_stream_7 = result_D1;
-	assign data_stream_8 = result_D2;
+	assign data_stream_1 = amp_maintenance ? 32'b0 : result_A1;
+	assign data_stream_2 = amp_maintenance ? 32'b0 : result_A2;
+	assign data_stream_3 = amp_maintenance ? 32'b0 : result_B1;
+	assign data_stream_4 = amp_maintenance ? 32'b0 : result_B2;
+	assign data_stream_5 = amp_maintenance ? 32'b0 : result_C1;
+	assign data_stream_6 = amp_maintenance ? 32'b0 : result_C2;
+	assign data_stream_7 = amp_maintenance ? 32'b0 : result_D1;
+	assign data_stream_8 = amp_maintenance ? 32'b0 : result_D2;
 
 	
 	// Opal Kelly USB I/O Host and Endpoint Modules
@@ -3954,6 +3995,7 @@ module command_selector_stim (
 	input wire           use_aux_cmd,
 	input wire				DC_amp_convert,
 	input wire				stim_en,
+	input wire				amp_maintenance,
 	input wire [15:0]		stim_on,
 	input wire [15:0]		stim_pol,
 	input wire [15:0]		charge_recov,
@@ -3997,6 +4039,9 @@ module command_selector_stim (
 	assign charge_recov_or_compliance_monitor_cmd = amp_settle_changed ? 
 		{ 2'b10, 2'b10, 4'b0000, charge_recov_register, charge_recov_cmd } : { 2'b10, 2'b11, 4'b0000, charge_recov_register, charge_recov_cmd };
 	
+	wire route_stim;
+	assign route_stim = stim_en && !amp_maintenance;
+
 	always @(*) begin
 		case (channel)
 			0:       MOSI_cmd <= { 2'b00, 2'b00, DC_amp_convert, DSP_settle, 4'b0000, channel, 16'h0000 };
@@ -4015,10 +4060,10 @@ module command_selector_stim (
 			13:      MOSI_cmd <= { 2'b00, 2'b00, DC_amp_convert, DSP_settle, 4'b0000, channel, 16'h0000 };
 			14:      MOSI_cmd <= { 2'b00, 2'b00, DC_amp_convert, DSP_settle, 4'b0000, channel, 16'h0000 };
 			15:      MOSI_cmd <= { 2'b00, 2'b00, DC_amp_convert, DSP_settle, 4'b0000, channel, 16'h0000 };
-			16:		MOSI_cmd <= stim_en ? { 2'b10, 2'b00, 4'b0000, stim_on_register, stim_on_cmd  } : aux_cmd1; // turn stim on/off
-			17:		MOSI_cmd <= stim_en ? { 2'b10, 2'b00, 4'b0000, stim_pol_register, stim_pol_cmd } : aux_cmd1; // set stim polarity
-			18:		MOSI_cmd <= stim_en ? amp_settle_or_compliance_monitor_cmd : aux_cmd1; // set amp settle
-			19:		MOSI_cmd <= stim_en ? charge_recov_or_compliance_monitor_cmd : aux_cmd1; // set charge recovery, trigger U flag
+			16:		MOSI_cmd <= route_stim ? { 2'b10, 2'b00, 4'b0000, stim_on_register, stim_on_cmd  } : aux_cmd1; // turn stim on/off
+			17:		MOSI_cmd <= route_stim ? { 2'b10, 2'b00, 4'b0000, stim_pol_register, stim_pol_cmd } : aux_cmd1; // set stim polarity
+			18:		MOSI_cmd <= route_stim ? amp_settle_or_compliance_monitor_cmd : aux_cmd1; // set amp settle
+			19:		MOSI_cmd <= route_stim ? charge_recov_or_compliance_monitor_cmd : aux_cmd1; // set charge recovery, trigger U flag
 			default: MOSI_cmd <= 32'b0;
 			endcase
 	end	

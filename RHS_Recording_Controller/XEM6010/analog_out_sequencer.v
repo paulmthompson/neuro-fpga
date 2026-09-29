@@ -33,6 +33,7 @@ module analog_out_sequencer #(
 	output wire			DAC_sequencer_en,
 	output reg [15:0] DAC_out,
 	input wire			shutdown,
+	input wire			amp_maintenance,
 	input wire			reset_sequencer
    );
 
@@ -116,6 +117,8 @@ module analog_out_sequencer #(
 			DAC_out <= DAC_baseline;
 			waiting_for_trigger <=1'b1;
 			waiting_for_edge <=1'b1;
+		end else if (amp_maintenance) begin
+			DAC_out <= DAC_baseline;
 		end else begin
 			if (channel[5:0] == 6'b000000) begin
 				case (main_state)
@@ -184,7 +187,7 @@ module analog_out_sequencer #(
 					end
 					
 					160: begin
-						if (shutdown) begin
+						if (shutdown || amp_maintenance) begin
 							DAC_out <= DAC_baseline;
 						end
 					end

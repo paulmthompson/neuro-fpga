@@ -118,6 +118,8 @@ CONFIG MCB_PERFORMANCE= STANDARD;
 NET "SDRAM_FIFO_inst/memc?_wrapper_inst/memc?_mcb_raw_wrapper_inst/selfrefresh_mcb_mode" TIG;
 NET "SDRAM_FIFO_inst/c?_pll_lock" TIG;
 NET "SDRAM_FIFO_inst/memc?_wrapper_inst/memc?_mcb_raw_wrapper_inst/gen_term_calib.mcb_soft_calibration_top_inst/mcb_soft_calibration_inst/CKE_Train" TIG;
+NET "ep05wirein<*>" TIG;
+NET "ep0bwirein<*>" TIG;
      
 
 ############################################################################
