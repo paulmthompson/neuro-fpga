@@ -374,6 +374,8 @@ module main #(
 	reg [31:0] 		timestamp;			 
 	reg [31:0]		max_timestep;
 	wire [31:0]		max_timestep_in;
+	reg [31:0]		latched_max_timestep;
+	reg				latched_run_continuous;
 	wire [31:0] 	data_stream_timestamp;
 	wire [63:0]		header_magic_number;
 	
@@ -1203,6 +1205,8 @@ module main #(
 			FIFO_write_to <= 1'b0;
 			ADC_triggers <= 8'b0;
 			shutdown <= 1'b0;
+			latched_run_continuous <= 1'b0;
+			latched_max_timestep <= 32'b0;
 		end else begin
 			CS_b <= 1'b0;
 			SCLK <= 1'b0;
@@ -1275,6 +1279,8 @@ module main #(
 					shutdown <= 1'b0;
 
 					if (SPI_start) begin
+						latched_run_continuous <= SPI_run_continuous;
+						latched_max_timestep   <= max_timestep_in;
 						main_state <= ms_cs_j;
 					end
 				end
@@ -3273,16 +3279,18 @@ module main #(
 					CS_b <= 1'b1;	
 					
 					if (channel == 19) begin
-						if (SPI_run_continuous) begin		// run continuously if SPI_run_continuous == 1
-							main_state <= ms_cs_j;
-						end else begin
-							if (shutdown) begin
-								shutdown <= 1'b0;
-								main_state <= ms_wait;
-							end else if (max_timestep == 32'b0) begin // stop with shutdown if max_timestep == 0
+						if (shutdown) begin
+							shutdown <= 1'b0;
+							main_state <= ms_wait;
+						end else if (latched_run_continuous) begin
+							if (SPI_run_continuous) begin
+								main_state <= ms_cs_j;
+							end else begin
 								shutdown <= 1'b1;
 								main_state <= ms_cs_j;
-							end else if (timestamp == max_timestep) begin  // stop without shutdown if max_timestep reached
+							end
+						end else begin
+							if (timestamp == latched_max_timestep) begin
 								main_state <= ms_wait;
 							end else begin
 								main_state <= ms_cs_j;
