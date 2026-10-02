@@ -372,15 +372,14 @@ module main #(
 	reg [31:0] 		result_D1, result_D2;
 
 	reg [31:0] 		timestamp;			 
-	reg [31:0]		max_timestep;
 	wire [31:0]		max_timestep_in;
 	reg [31:0]		latched_max_timestep;
 	reg				latched_run_continuous;
 	wire [31:0] 	data_stream_timestamp;
 	wire [63:0]		header_magic_number;
 	
-	wire [31:0]		data_stream_1, data_stream_2, data_stream_3, data_stream_4;
-	wire [31:0]		data_stream_5, data_stream_6, data_stream_7, data_stream_8;
+	reg [31:0]		data_stream_1, data_stream_2, data_stream_3, data_stream_4;
+	reg [31:0]		data_stream_5, data_stream_6, data_stream_7, data_stream_8;
 	reg				data_stream_1_en, data_stream_2_en, data_stream_3_en, data_stream_4_en;
 	reg				data_stream_5_en, data_stream_6_en, data_stream_7_en, data_stream_8_en;
 	wire				data_stream_1_en_in, data_stream_2_en_in, data_stream_3_en_in, data_stream_4_en_in;
@@ -492,10 +491,6 @@ module main #(
 
 	assign max_timestep_in[15:0] = 	ep01wirein;
 	assign max_timestep_in[31:16] =	ep02wirein;
-
-	always @(posedge dataclk) begin
-		max_timestep <= max_timestep_in;
-	end
 
 	assign dataclk_M = 					{ 1'b0, ep03wirein[15:8] };
 	assign dataclk_D = 					{ 1'b0, ep03wirein[7:0] };
@@ -3097,6 +3092,14 @@ module main #(
 					result_B1 <= in_B1; result_B2 <= in_B2;
 					result_C1 <= in_C1; result_C2 <= in_C2;
 					result_D1 <= in_D1; result_D2 <= in_D2;
+					data_stream_1 <= amp_maintenance ? 32'b0 : in_A1;
+					data_stream_2 <= amp_maintenance ? 32'b0 : in_A2;
+					data_stream_3 <= amp_maintenance ? 32'b0 : in_B1;
+					data_stream_4 <= amp_maintenance ? 32'b0 : in_B2;
+					data_stream_5 <= amp_maintenance ? 32'b0 : in_C1;
+					data_stream_6 <= amp_maintenance ? 32'b0 : in_C2;
+					data_stream_7 <= amp_maintenance ? 32'b0 : in_D1;
+					data_stream_8 <= amp_maintenance ? 32'b0 : in_D2;
 					main_state <= ms_cs_h;
 				end
 				
@@ -3130,115 +3133,116 @@ module main #(
 						end
 					end
 					
-					// Route selected samples to DAC outputs
+					// Route selected samples to DAC outputs (use in_* not data_stream_* so amp_maintenance
+					// USB zeroing does not affect physical ANALOG OUT)
 					if ((channel_MISO == DAC_channel_sel_1) && ~shutdown) begin
 						case (DAC_stream_sel_1)
-							0: DAC_pre_register_1 <= data_stream_1[31:16];
-							1: DAC_pre_register_1 <= data_stream_2[31:16];
-							2: DAC_pre_register_1 <= data_stream_3[31:16];
-							3: DAC_pre_register_1 <= data_stream_4[31:16];
-							4: DAC_pre_register_1 <= data_stream_5[31:16];
-							5: DAC_pre_register_1 <= data_stream_6[31:16];
-							6: DAC_pre_register_1 <= data_stream_7[31:16];
-							7: DAC_pre_register_1 <= data_stream_8[31:16];
+							0: DAC_pre_register_1 <= in_A1[31:16];
+							1: DAC_pre_register_1 <= in_A2[31:16];
+							2: DAC_pre_register_1 <= in_B1[31:16];
+							3: DAC_pre_register_1 <= in_B2[31:16];
+							4: DAC_pre_register_1 <= in_C1[31:16];
+							5: DAC_pre_register_1 <= in_C2[31:16];
+							6: DAC_pre_register_1 <= in_D1[31:16];
+							7: DAC_pre_register_1 <= in_D2[31:16];
 							8: DAC_pre_register_1 <= DAC_manual;
 							default: DAC_pre_register_1 <= 16'b0;
 						endcase
 					end
 					if ((channel_MISO == DAC_channel_sel_2) && ~shutdown) begin
 						case (DAC_stream_sel_2)
-							0: DAC_pre_register_2 <= data_stream_1[31:16];
-							1: DAC_pre_register_2 <= data_stream_2[31:16];
-							2: DAC_pre_register_2 <= data_stream_3[31:16];
-							3: DAC_pre_register_2 <= data_stream_4[31:16];
-							4: DAC_pre_register_2 <= data_stream_5[31:16];
-							5: DAC_pre_register_2 <= data_stream_6[31:16];
-							6: DAC_pre_register_2 <= data_stream_7[31:16];
-							7: DAC_pre_register_2 <= data_stream_8[31:16];
+							0: DAC_pre_register_2 <= in_A1[31:16];
+							1: DAC_pre_register_2 <= in_A2[31:16];
+							2: DAC_pre_register_2 <= in_B1[31:16];
+							3: DAC_pre_register_2 <= in_B2[31:16];
+							4: DAC_pre_register_2 <= in_C1[31:16];
+							5: DAC_pre_register_2 <= in_C2[31:16];
+							6: DAC_pre_register_2 <= in_D1[31:16];
+							7: DAC_pre_register_2 <= in_D2[31:16];
 							8: DAC_pre_register_2 <= DAC_manual;
 							default: DAC_pre_register_2 <= 16'b0;
 						endcase
 					end
 					if ((channel_MISO == DAC_channel_sel_3) && ~shutdown) begin
 						case (DAC_stream_sel_3)
-							0: DAC_pre_register_3 <= data_stream_1[31:16];
-							1: DAC_pre_register_3 <= data_stream_2[31:16];
-							2: DAC_pre_register_3 <= data_stream_3[31:16];
-							3: DAC_pre_register_3 <= data_stream_4[31:16];
-							4: DAC_pre_register_3 <= data_stream_5[31:16];
-							5: DAC_pre_register_3 <= data_stream_6[31:16];
-							6: DAC_pre_register_3 <= data_stream_7[31:16];
-							7: DAC_pre_register_3 <= data_stream_8[31:16];
+							0: DAC_pre_register_3 <= in_A1[31:16];
+							1: DAC_pre_register_3 <= in_A2[31:16];
+							2: DAC_pre_register_3 <= in_B1[31:16];
+							3: DAC_pre_register_3 <= in_B2[31:16];
+							4: DAC_pre_register_3 <= in_C1[31:16];
+							5: DAC_pre_register_3 <= in_C2[31:16];
+							6: DAC_pre_register_3 <= in_D1[31:16];
+							7: DAC_pre_register_3 <= in_D2[31:16];
 							8: DAC_pre_register_3 <= DAC_manual;
 							default: DAC_pre_register_3 <= 16'b0;
 						endcase
 					end
 					if ((channel_MISO == DAC_channel_sel_4) && ~shutdown) begin
 						case (DAC_stream_sel_4)
-							0: DAC_pre_register_4 <= data_stream_1[31:16];
-							1: DAC_pre_register_4 <= data_stream_2[31:16];
-							2: DAC_pre_register_4 <= data_stream_3[31:16];
-							3: DAC_pre_register_4 <= data_stream_4[31:16];
-							4: DAC_pre_register_4 <= data_stream_5[31:16];
-							5: DAC_pre_register_4 <= data_stream_6[31:16];
-							6: DAC_pre_register_4 <= data_stream_7[31:16];
-							7: DAC_pre_register_4 <= data_stream_8[31:16];
+							0: DAC_pre_register_4 <= in_A1[31:16];
+							1: DAC_pre_register_4 <= in_A2[31:16];
+							2: DAC_pre_register_4 <= in_B1[31:16];
+							3: DAC_pre_register_4 <= in_B2[31:16];
+							4: DAC_pre_register_4 <= in_C1[31:16];
+							5: DAC_pre_register_4 <= in_C2[31:16];
+							6: DAC_pre_register_4 <= in_D1[31:16];
+							7: DAC_pre_register_4 <= in_D2[31:16];
 							8: DAC_pre_register_4 <= DAC_manual;
 							default: DAC_pre_register_4 <= 16'b0;
 						endcase
 					end
 					if ((channel_MISO == DAC_channel_sel_5) && ~shutdown) begin
 						case (DAC_stream_sel_5)
-							0: DAC_pre_register_5 <= data_stream_1[31:16];
-							1: DAC_pre_register_5 <= data_stream_2[31:16];
-							2: DAC_pre_register_5 <= data_stream_3[31:16];
-							3: DAC_pre_register_5 <= data_stream_4[31:16];
-							4: DAC_pre_register_5 <= data_stream_5[31:16];
-							5: DAC_pre_register_5 <= data_stream_6[31:16];
-							6: DAC_pre_register_5 <= data_stream_7[31:16];
-							7: DAC_pre_register_5 <= data_stream_8[31:16];
+							0: DAC_pre_register_5 <= in_A1[31:16];
+							1: DAC_pre_register_5 <= in_A2[31:16];
+							2: DAC_pre_register_5 <= in_B1[31:16];
+							3: DAC_pre_register_5 <= in_B2[31:16];
+							4: DAC_pre_register_5 <= in_C1[31:16];
+							5: DAC_pre_register_5 <= in_C2[31:16];
+							6: DAC_pre_register_5 <= in_D1[31:16];
+							7: DAC_pre_register_5 <= in_D2[31:16];
 							8: DAC_pre_register_5 <= DAC_manual;
 							default: DAC_pre_register_5 <= 16'b0;
 						endcase
 					end
 					if ((channel_MISO == DAC_channel_sel_6) && ~shutdown) begin
 						case (DAC_stream_sel_6)
-							0: DAC_pre_register_6 <= data_stream_1[31:16];
-							1: DAC_pre_register_6 <= data_stream_2[31:16];
-							2: DAC_pre_register_6 <= data_stream_3[31:16];
-							3: DAC_pre_register_6 <= data_stream_4[31:16];
-							4: DAC_pre_register_6 <= data_stream_5[31:16];
-							5: DAC_pre_register_6 <= data_stream_6[31:16];
-							6: DAC_pre_register_6 <= data_stream_7[31:16];
-							7: DAC_pre_register_6 <= data_stream_8[31:16];
+							0: DAC_pre_register_6 <= in_A1[31:16];
+							1: DAC_pre_register_6 <= in_A2[31:16];
+							2: DAC_pre_register_6 <= in_B1[31:16];
+							3: DAC_pre_register_6 <= in_B2[31:16];
+							4: DAC_pre_register_6 <= in_C1[31:16];
+							5: DAC_pre_register_6 <= in_C2[31:16];
+							6: DAC_pre_register_6 <= in_D1[31:16];
+							7: DAC_pre_register_6 <= in_D2[31:16];
 							8: DAC_pre_register_6 <= DAC_manual;
 							default: DAC_pre_register_6 <= 16'b0;
 						endcase
 					end
 					if ((channel_MISO == DAC_channel_sel_7) && ~shutdown) begin
 						case (DAC_stream_sel_7)
-							0: DAC_pre_register_7 <= data_stream_1[31:16];
-							1: DAC_pre_register_7 <= data_stream_2[31:16];
-							2: DAC_pre_register_7 <= data_stream_3[31:16];
-							3: DAC_pre_register_7 <= data_stream_4[31:16];
-							4: DAC_pre_register_7 <= data_stream_5[31:16];
-							5: DAC_pre_register_7 <= data_stream_6[31:16];
-							6: DAC_pre_register_7 <= data_stream_7[31:16];
-							7: DAC_pre_register_7 <= data_stream_8[31:16];
+							0: DAC_pre_register_7 <= in_A1[31:16];
+							1: DAC_pre_register_7 <= in_A2[31:16];
+							2: DAC_pre_register_7 <= in_B1[31:16];
+							3: DAC_pre_register_7 <= in_B2[31:16];
+							4: DAC_pre_register_7 <= in_C1[31:16];
+							5: DAC_pre_register_7 <= in_C2[31:16];
+							6: DAC_pre_register_7 <= in_D1[31:16];
+							7: DAC_pre_register_7 <= in_D2[31:16];
 							8: DAC_pre_register_7 <= DAC_manual;
 							default: DAC_pre_register_7 <= 16'b0;
 						endcase
 					end
 					if ((channel_MISO == DAC_channel_sel_8) && ~shutdown) begin
 						case (DAC_stream_sel_8)
-							0: DAC_pre_register_8 <= data_stream_1[31:16];
-							1: DAC_pre_register_8 <= data_stream_2[31:16];
-							2: DAC_pre_register_8 <= data_stream_3[31:16];
-							3: DAC_pre_register_8 <= data_stream_4[31:16];
-							4: DAC_pre_register_8 <= data_stream_5[31:16];
-							5: DAC_pre_register_8 <= data_stream_6[31:16];
-							6: DAC_pre_register_8 <= data_stream_7[31:16];
-							7: DAC_pre_register_8 <= data_stream_8[31:16];
+							0: DAC_pre_register_8 <= in_A1[31:16];
+							1: DAC_pre_register_8 <= in_A2[31:16];
+							2: DAC_pre_register_8 <= in_B1[31:16];
+							3: DAC_pre_register_8 <= in_B2[31:16];
+							4: DAC_pre_register_8 <= in_C1[31:16];
+							5: DAC_pre_register_8 <= in_C2[31:16];
+							6: DAC_pre_register_8 <= in_D1[31:16];
+							7: DAC_pre_register_8 <= in_D2[31:16];
 							8: DAC_pre_register_8 <= DAC_manual;
 							default: DAC_pre_register_8 <= 16'b0;
 						endcase
@@ -3247,14 +3251,14 @@ module main #(
 					// Route selected sample to DAC software re-reference input
 					if (channel_MISO == DAC_reref_channel_sel && ~shutdown) begin
 						case (DAC_reref_stream_sel)
-							0: DAC_reref_pre_register <= data_stream_1;
-							1: DAC_reref_pre_register <= data_stream_2;
-							2: DAC_reref_pre_register <= data_stream_3;
-							3: DAC_reref_pre_register <= data_stream_4;
-							4: DAC_reref_pre_register <= data_stream_5;
-							5: DAC_reref_pre_register <= data_stream_6;
-							6: DAC_reref_pre_register <= data_stream_7;
-							7: DAC_reref_pre_register <= data_stream_8;
+							0: DAC_reref_pre_register <= in_A1[31:16];
+							1: DAC_reref_pre_register <= in_A2[31:16];
+							2: DAC_reref_pre_register <= in_B1[31:16];
+							3: DAC_reref_pre_register <= in_B2[31:16];
+							4: DAC_reref_pre_register <= in_C1[31:16];
+							5: DAC_reref_pre_register <= in_C2[31:16];
+							6: DAC_reref_pre_register <= in_D1[31:16];
+							7: DAC_reref_pre_register <= in_D2[31:16];
 						endcase
 					end
 					
@@ -3877,15 +3881,6 @@ module main #(
 
 	MISO_phase_selector MISO_phase_selector_8 (
 		.phase_select(delay_D), .MISO4x(in4x_D2), .MISO(in_D2));	
-
-	assign data_stream_1 = amp_maintenance ? 32'b0 : result_A1;
-	assign data_stream_2 = amp_maintenance ? 32'b0 : result_A2;
-	assign data_stream_3 = amp_maintenance ? 32'b0 : result_B1;
-	assign data_stream_4 = amp_maintenance ? 32'b0 : result_B2;
-	assign data_stream_5 = amp_maintenance ? 32'b0 : result_C1;
-	assign data_stream_6 = amp_maintenance ? 32'b0 : result_C2;
-	assign data_stream_7 = amp_maintenance ? 32'b0 : result_D1;
-	assign data_stream_8 = amp_maintenance ? 32'b0 : result_D2;
 
 	
 	// Opal Kelly USB I/O Host and Endpoint Modules
