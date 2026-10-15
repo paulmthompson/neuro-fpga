@@ -109,7 +109,7 @@ module main #(
 	 output wire										MOSI2_A,
     input  wire                              MISO1_A,
     input  wire                              MISO2_A,
-	
+
     output wire                              CS_b_B,
     output wire                              SCLK_B,
     output wire                              MOSI1_B,
@@ -623,7 +623,15 @@ module main #(
 	
 	assign SPI_start = 					ep41trigin[0];
 
+	// Amplifier/analog sequencer reset used by maintenance. The digital-output
+	// sequencer is intentionally not connected; board reset and acquisition
+	// Stop provide its reset/clear domains without interrupting camera timing.
 	assign reset_sequencers = 			ep41trigin[1];
+
+	// RHS board TTL command: WireIn 0x0e channel/opcode, then TriggerIn 0x41[2].
+	// The TriggerIn endpoint is clocked by dataclk; the host updates the WireIn
+	// before activating the trigger. Other 0x41 bits retain their original uses.
+	wire digout_command_strobe = ep41trigin[2];
 	
 	assign RAM_addr_reset = 			ep42trigin[0];
 
@@ -725,8 +733,9 @@ module main #(
 	
 	assign ep26wireout = 				{ 12'b0, expander_ID_1, expander_detect, TTL_in_serial_exp, TTL_in_serial };
 
-	// Unused; future expansion
-	assign ep27wireout = 				16'h0000;
+	// Step 3 digital-output command protocol identifier ('DS'). Keep the board
+	// version unchanged; the host checks this value before sending live commands.
+	assign ep27wireout = 				16'h4453;
 	assign ep28wireout = 				16'h0000;
 	assign ep29wireout = 				16'h0000;
 	assign ep2awireout = 				16'h0000;
@@ -3405,24 +3414,33 @@ module main #(
 		.amp_maintenance(amp_maintenance), .reset_sequencer(reset_sequencers));
 
 	
-	wire [15:0] digout_sequencer, digout_sequencer_enabled, TTL_out_DAC_thresh;
+	wire [15:0] digout_sequencer, digout_sequencer_enabled;
+	wire [15:0] digout_ttl_source;
+	wire digout_command_accepted;
 	
+	// Unlike amplifier and analog sequencers above, digital outputs do not
+	// receive reset_sequencers or maintenance gating.
 	digout_sequencer #(16) digout_sequencer_1 (.reset(reset), .dataclk(dataclk), .main_state(main_state), .channel(channel),
 		.prog_channel(prog_channel), .prog_address(prog_address), .prog_module(prog_module), .prog_word(prog_word), .prog_trig(prog_trig),
-		.triggers(triggers), .digout(digout_sequencer), .digout_enabled(digout_sequencer_enabled), .shutdown(shutdown),
-		.amp_maintenance(amp_maintenance), .reset_sequencer(reset_sequencers));
-	
-	assign TTL_out_DAC_thresh = { 8'b00000000, DAC_thresh_out };
-	
-	assign TTL_out_direct[0] = TTL_out_mode[0] ? TTL_out_DAC_thresh[0] : digout_sequencer[0];
-	assign TTL_out_direct[1] = TTL_out_mode[1] ? TTL_out_DAC_thresh[1] : digout_sequencer[1];
-	assign TTL_out_direct[2] = TTL_out_mode[2] ? TTL_out_DAC_thresh[2] : digout_sequencer[2];
-	assign TTL_out_direct[3] = TTL_out_mode[3] ? TTL_out_DAC_thresh[3] : digout_sequencer[3];
-	assign TTL_out_direct[4] = TTL_out_mode[4] ? TTL_out_DAC_thresh[4] : digout_sequencer[4];
-	assign TTL_out_direct[5] = TTL_out_mode[5] ? TTL_out_DAC_thresh[5] : digout_sequencer[5];
-	assign TTL_out_direct[6] = TTL_out_mode[6] ? TTL_out_DAC_thresh[6] : digout_sequencer[6];
-	assign TTL_out_direct[7] = TTL_out_mode[7] ? TTL_out_DAC_thresh[7] : digout_sequencer[7];
-	assign TTL_out_direct[15:8] = digout_sequencer[15:8];
+		.triggers(triggers), .command_strobe(digout_command_strobe), .command_word(ep0ewirein[6:0]),
+		.acquisition_running(SPI_running), .threshold_mode(TTL_out_mode),
+		.digout(digout_sequencer), .digout_enabled(digout_sequencer_enabled),
+		.command_accepted(digout_command_accepted), .shutdown(shutdown),
+		.amp_maintenance(amp_maintenance));
+
+	// Physical pin priority (also reflected in recorded TTL_out_direct):
+	// reset -> low; manual level for non-threshold pins; threshold on 1-8;
+	// otherwise sequencer when acquisition is running and rearmed.
+
+	digout_output_control digout_output_control_1 (
+		.dataclk(dataclk), .reset(reset),
+		.command_strobe(digout_command_strobe),
+		.sequencer_command_accepted(digout_command_accepted),
+		.command_word(ep0ewirein[6:0]),
+		.acquisition_running(SPI_running), .threshold_mode(TTL_out_mode),
+		.threshold_out(DAC_thresh_out), .sequencer_out(digout_sequencer),
+		.ttl_out(digout_ttl_source));
+	assign TTL_out_direct = digout_ttl_source;
 	
 	// assign TTL_out_direct = { CS_b_A, SCLK_A, MOSI1_A, MISO1_A, digout_sequencer[11:1], FIFO_write_to };
 	// assign TTL_out_direct = { DAC_SYNC, DAC_SCLK, DAC_DIN_1, DAC_DIN_2, digout_sequencer[11:0] };

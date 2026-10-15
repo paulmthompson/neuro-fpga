@@ -14,11 +14,15 @@ module rhs_digout_sequencer_tb;
     reg [31:0] prog_word = 0;
     reg prog_trig = 0;
     reg [31:0] triggers = 0;
+    reg command_strobe = 0;
+    reg [6:0] command_word = 0;
+    reg acquisition_running = 1;
+    reg [7:0] threshold_mode = 0;
     wire [15:0] digout;
     wire [15:0] digout_enabled;
+    wire command_accepted;
     reg shutdown = 0;
     reg amp_maintenance = 0;
-    reg reset_sequencer = 0;
 
     integer frame = 0;
     integer rises [0:15];
@@ -26,16 +30,22 @@ module rhs_digout_sequencer_tb;
     integer first_rise [0:15];
     integer second_rise [0:15];
     integer last_rise [0:15];
+    integer first_fall [0:15];
     integer i;
+    integer before_rises;
+    integer maintenance_rise;
+    reg accepted;
 
     digout_sequencer #(.MODULE(16)) dut (
         .reset(reset), .dataclk(dataclk), .main_state(main_state),
         .channel(channel), .prog_channel(prog_channel),
         .prog_address(prog_address), .prog_module(prog_module),
         .prog_word(prog_word), .prog_trig(prog_trig), .triggers(triggers),
+        .command_strobe(command_strobe), .command_word(command_word),
+        .acquisition_running(acquisition_running), .threshold_mode(threshold_mode),
         .digout(digout), .digout_enabled(digout_enabled),
-        .shutdown(shutdown), .amp_maintenance(amp_maintenance),
-        .reset_sequencer(reset_sequencer)
+        .command_accepted(command_accepted),
+        .shutdown(shutdown), .amp_maintenance(amp_maintenance)
     );
 
     // Check all 16 pins after every clock, not only at expected transitions.
@@ -51,6 +61,7 @@ module rhs_digout_sequencer_tb;
                         last_rise[pin] = frame;
                     end else if (digout[pin] === 1'b0) begin
                         falls[pin] = falls[pin] + 1;
+                        if (first_fall[pin] == -1) first_fall[pin] = frame;
                     end else begin
                         $fatal(1, "X/Z on pin %0d at frame %0d", pin, frame);
                     end
@@ -124,6 +135,67 @@ module rhs_digout_sequencer_tb;
         end
     endtask
 
+    task configure_level_pin;
+        input [3:0] ch;
+        input [4:0] source;
+        input [7:0] additional_pulses;
+        input [31:0] width;
+        input [31:0] period;
+        begin
+            configure_pin(ch, source, additional_pulses, 0, width, period);
+            // The same trigger register, without bit 5 (edge detection).
+            program_reg(ch, 0, 32'h00000080 | source);
+        end
+    endtask
+
+    task configure_continuous_pin;
+        input [3:0] ch;
+        input [31:0] width;
+        input [31:0] period;
+        begin
+            // Enabled + continuous bit. Trigger source is intentionally zero:
+            // external trigger state must have no effect in this mode.
+            program_reg(ch, 0, 32'h00000080);
+            program_reg(ch, 1, 32'h00000100);
+            program_reg(ch, 4, 0);
+            program_reg(ch, 7, width);
+            program_reg(ch, 8, period);
+            program_reg(ch, 13, width + 2);
+        end
+    endtask
+
+    task configure_manual_fire_pin;
+        input [3:0] ch;
+        input [7:0] additional_pulses;
+        input [31:0] width;
+        input [31:0] period;
+        begin
+            // Enabled + Manual Fire bit; trigger index zero must be ignored.
+            program_reg(ch, 0, 32'h00000180);
+            program_reg(ch, 1, {24'b0, additional_pulses});
+            program_reg(ch, 4, 0);
+            program_reg(ch, 7, width);
+            program_reg(ch, 8, period);
+            program_reg(ch, 13, width + 2);
+        end
+    endtask
+
+    task live_command;
+        input [2:0] opcode;
+        input [3:0] ch;
+        output was_accepted;
+        begin
+            @(negedge dataclk);
+            command_word = {opcode, ch};
+            command_strobe = 1;
+            #1;
+            was_accepted = command_accepted;
+            @(negedge dataclk);
+            command_strobe = 0;
+            #1;
+        end
+    endtask
+
     task check;
         input condition;
         input [8*100-1:0] message;
@@ -139,6 +211,7 @@ module rhs_digout_sequencer_tb;
             first_rise[i] = -1;
             second_rise[i] = -1;
             last_rise[i] = -1;
+            first_fall[i] = -1;
         end
         #2;
         tick(99, 0);
@@ -168,6 +241,8 @@ module rhs_digout_sequencer_tb;
               "two-pulse baseline spacing changed");
         check(second_rise[15] - first_rise[15] == 6,
               "three-pulse baseline spacing changed");
+        check(first_fall[1] - first_rise[1] == 2,
+              "two-tick pulse width changed");
         check(digout == 16'b0, "pins did not return low after finite trains");
         $display("PASS: single/finite pulse counts, per-channel isolation, period");
 
@@ -183,8 +258,29 @@ module rhs_digout_sequencer_tb;
               "edge-triggered channel failed to rearm");
         $display("PASS: edge-trigger rearming");
 
-        // The current FPGA explicitly clears digout during maintenance. This
-        // baseline pins that behavior so a later change can replace this test.
+        // A held level starts a new single-pulse program after completion.
+        configure_level_pin(4, 5, 0, 2, 5);
+        triggers[5] = 1;
+        repeat (12) sample_frame();
+        check(rises[4] >= 2, "level trigger did not retrigger");
+        triggers[5] = 0;
+        repeat (8) sample_frame();
+        check(digout[4] === 1'b0, "level output did not return low");
+        $display("PASS: held-level retrigger");
+
+        // 255 additional repeats give the full 256-pulse range.
+        configure_pin(5, 6, 8'hff, 0, 2, 5);
+        sample_frame();
+        triggers[6] = 1;
+        repeat (1550) sample_frame();
+        check(rises[5] == 256 && falls[5] == 256,
+              "256-pulse train count incorrect");
+        check(digout[5] === 1'b0, "256-pulse train did not end low");
+        $display("PASS: 256 pulses");
+
+        // Amplifier maintenance is output-transparent for the digital
+        // sequencer. The shared amplifier/analog reset pulse has no digital
+        // DUT input, so neither maintenance entry nor that pulse can reset it.
         triggers[3] = 0;
         configure_pin(2, 3, 0, 0, 100, 200);
         sample_frame();
@@ -192,24 +288,154 @@ module rhs_digout_sequencer_tb;
         sample_frame();
         check(digout[2] === 1'b1, "long pulse did not begin");
         amp_maintenance = 1;
-        sample_frame();
-        check(digout[2] === 1'b0, "baseline maintenance did not clear output");
+        repeat (3) sample_frame();
+        check(digout[2] === 1'b1, "maintenance interrupted digital output");
         amp_maintenance = 0;
-        $display("PASS: recorded existing maintenance-low behavior");
+        repeat (3) sample_frame();
+        check(digout[2] === 1'b1, "maintenance exit interrupted digital output");
+        $display("PASS: maintenance entry/reset/exit are output-transparent");
 
-        // Also check the global sequencer reset used by maintenance in host
-        // code; reset must clear output and allow a future fresh trigger.
-        triggers[4] = 0;
-        configure_pin(3, 4, 0, 0, 100, 200);
+        // shutdown forces a currently high output low at state 114.
+        configure_pin(6, 7, 0, 0, 100, 200);
         sample_frame();
-        triggers[4] = 1;
+        triggers[7] = 1;
         sample_frame();
-        check(digout[3] === 1'b1, "long pulse for reset test did not begin");
-        reset_sequencer = 1;
+        check(digout[6] === 1'b1, "shutdown-test pulse did not begin");
+        shutdown = 1;
+        sample_frame();
+        check(digout[6] === 1'b0, "shutdown did not clear output");
+        shutdown = 0;
+        $display("PASS: shutdown forces output low");
+
+        // Continuous mode ignores external triggers and starts only from its
+        // per-channel command. It uses exact period semantics (five frames,
+        // unlike the preserved six-frame finite baseline above).
+        triggers[0] = 1;
+        configure_continuous_pin(7, 2, 5);
+        repeat (3) sample_frame();
+        check(rises[7] == 0, "external trigger started continuous mode");
+        live_command(2, 7, accepted);
+        check(accepted, "eligible continuous Start was rejected");
+        repeat (15) sample_frame();
+        check(rises[7] >= 3, "continuous train did not repeat");
+        check(second_rise[7] - first_rise[7] == 5,
+              "continuous period is not exact");
+
+        // Stop while high is prompt, disarms the channel, and a later Start
+        // begins a fresh waveform. A repeated Start while busy is ignored.
+        while (digout[7] !== 1'b1) sample_frame();
+        live_command(2, 7, accepted);
+        check(!accepted, "busy continuous Start was accepted");
+        live_command(3, 7, accepted);
+        check(accepted && digout[7] === 1'b0,
+              "continuous Stop did not force low");
+        before_rises = rises[7];
+        repeat (7) sample_frame();
+        check(rises[7] == before_rises, "stopped continuous train revived");
+        live_command(2, 7, accepted);
+        check(accepted, "fresh continuous restart was rejected");
+        while (digout[7] !== 1'b1) sample_frame();
+        repeat (2) sample_frame();
+        check(digout[7] === 1'b0, "continuous output did not enter low phase");
+        live_command(3, 7, accepted);
+        check(accepted && digout[7] === 1'b0, "Stop during low phase failed");
+        $display("PASS: continuous Start/Stop/restart and exact period");
+
+        // Manual Fire is exclusive from external triggers, retained until the
+        // channel slot consumes it, and ignored rather than queued while busy.
+        configure_manual_fire_pin(8, 1, 2, 5);
+        repeat (3) sample_frame();
+        check(rises[8] == 0, "external trigger started Manual Fire mode");
+        live_command(4, 8, accepted);
+        check(accepted, "eligible Fire was rejected");
+        repeat (2) sample_frame();
+        live_command(4, 8, accepted);
+        check(!accepted, "busy Fire was accepted");
+        repeat (15) sample_frame();
+        check(rises[8] == 2 && falls[8] == 2,
+              "Manual Fire finite pulse count incorrect");
+        live_command(4, 8, accepted);
+        check(accepted, "Manual Fire did not rearm after completion");
+        repeat (15) sample_frame();
+        check(rises[8] == 4 && falls[8] == 4,
+              "rearmed Manual Fire pulse count incorrect");
+
+        amp_maintenance = 1;
+        live_command(4, 8, accepted);
+        check(!accepted, "Fire during maintenance was accepted");
+        amp_maintenance = 0;
+        repeat (4) sample_frame();
+        check(rises[8] == 4, "maintenance Fire was queued");
+
+        // DAC-threshold ownership rejects Start/Fire before either can become
+        // pending. Stop remains available as a safety/disarm command.
+        configure_continuous_pin(3, 2, 5);
+        threshold_mode[3] = 1;
+        live_command(2, 3, accepted);
+        check(!accepted, "threshold-owned continuous Start was accepted");
+        live_command(3, 3, accepted);
+        check(accepted, "threshold-owned Stop was rejected");
+        threshold_mode[3] = 0;
+        $display("PASS: Manual Fire eligibility, rearm, and ownership");
+
+        // Stop acquisition clears an accepted-but-unconsumed Fire and an
+        // active continuous train. Neither may return on a later Run.
+        live_command(4, 8, accepted);
+        check(accepted, "pending-Fire setup failed");
+        acquisition_running = 0;
         tick(99, 0);
-        reset_sequencer = 0;
-        check(digout[3] === 1'b0, "baseline reset did not clear output");
-        $display("PASS: recorded existing shared-reset behavior");
+        check(digout === 16'b0, "acquisition Stop did not force all low");
+        acquisition_running = 1;
+        before_rises = rises[8];
+        repeat (8) sample_frame();
+        check(rises[8] == before_rises, "pending Fire survived Stop");
+
+        configure_continuous_pin(7, 2, 5);
+        live_command(2, 7, accepted);
+        repeat (2) sample_frame();
+        acquisition_running = 0;
+        tick(99, 0);
+        acquisition_running = 1;
+        before_rises = rises[7];
+        repeat (8) sample_frame();
+        check(rises[7] == before_rises, "continuous state survived Stop");
+        $display("PASS: acquisition Stop discards all software starts");
+
+        // A continuous waveform advances through both maintenance phases with
+        // no missing period. The amplifier reset pulse is intentionally absent
+        // from this digital module's interface.
+        configure_continuous_pin(9, 2, 5);
+        live_command(2, 9, accepted);
+        while (digout[9] !== 1'b1) sample_frame();
+        maintenance_rise = last_rise[9];
+        amp_maintenance = 1;
+        repeat (7) sample_frame();
+        amp_maintenance = 0;
+        repeat (5) sample_frame();
+        check(rises[9] >= 3, "continuous timing stopped in maintenance");
+        check(last_rise[9] - maintenance_rise == 10,
+              "maintenance changed continuous phase or period");
+        live_command(3, 9, accepted);
+        $display("PASS: continuous timing survives maintenance entry/exit");
+
+        // Independent software modes may run together. Manual source commands
+        // disarm only their selected sequencer channel.
+        configure_continuous_pin(11, 1, 4);
+        configure_manual_fire_pin(12, 0, 2, 5);
+        live_command(2, 11, accepted);
+        live_command(4, 12, accepted);
+        repeat (12) sample_frame();
+        check(rises[11] >= 3, "independent continuous channel failed");
+        check(rises[12] == 1 && falls[12] == 1,
+              "independent Manual Fire channel failed");
+        while (digout[11] !== 1'b1) sample_frame();
+        live_command(0, 11, accepted);
+        check(digout[11] === 1'b0, "Manual source did not disarm sequencer");
+        before_rises = rises[11];
+        repeat (6) sample_frame();
+        check(rises[11] == before_rises, "manual-disarmed sequencer revived");
+        $display("PASS: concurrent channels and source-transition disarm");
+
         $display("PASS: RHS digital sequencer baseline");
         $finish;
     end

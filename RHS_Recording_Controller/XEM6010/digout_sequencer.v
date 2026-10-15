@@ -31,11 +31,15 @@ module digout_sequencer #(
 	input wire [31:0] prog_word, // PMT
 	input wire			prog_trig,
 	input wire [31:0] triggers,
+	input wire			command_strobe,
+	input wire [6:0]	command_word,
+	input wire			acquisition_running,
+	input wire [7:0]	threshold_mode,
 	output reg [15:0] digout,
 	output wire [15:0] digout_enabled,
+	output wire			command_accepted,
 	input wire			shutdown,
-	input wire			amp_maintenance,
-	input wire			reset_sequencer
+	input wire			amp_maintenance
    );
 
 	reg [31:0] counter[15:0]; // PMT
@@ -44,10 +48,13 @@ module digout_sequencer #(
 	reg [15:0] trigger_on_edge;
 	reg [15:0] trigger_polarity;
 	reg [15:0] trigger_enable;
+	reg [15:0] manual_fire_trigger;
 	
 	reg [7:0] number_of_stim_pulses[15:0];
+	reg [15:0] continuous_repeat;
 	
 	reg [15:0] waiting_for_trigger, waiting_for_edge;
+	reg [15:0] continuous_running, fire_pending;
 	reg [7:0] stim_counter[15:0];
 	
 	// PMT
@@ -57,6 +64,40 @@ module digout_sequencer #(
 	reg [31:0] event_end[15:0];
 	
 	assign digout_enabled = trigger_enable;
+
+	// RHS digital-output live command protocol:
+	// WireIn 0x0e [3:0] channel, [6:4] opcode; TriggerIn 0x41[2] executes.
+	// 0/1 select Manual High/Low and disarm sequencing; 2 starts continuous
+	// mode; 3 stops/disarms any sequence; 4 fires an idle Manual-trigger
+	// single/finite program. Commands 2 and 4 are rejected during amplifier
+	// maintenance and while DAC-threshold mode owns outputs 1-8. Stop remains
+	// available during maintenance. TriggerIn is synchronous to dataclk.
+	localparam CMD_MANUAL_HIGH   = 3'd0;
+	localparam CMD_MANUAL_LOW    = 3'd1;
+	localparam CMD_CONTINUOUS_ON = 3'd2;
+	localparam CMD_SEQUENCE_STOP = 3'd3;
+	localparam CMD_FIRE          = 3'd4;
+
+	wire [3:0] command_channel = command_word[3:0];
+	wire [2:0] command_opcode = command_word[6:4];
+	wire command_threshold_owned =
+		(command_channel < 8) ? threshold_mode[command_channel] : 1'b0;
+	wire continuous_start_eligible =
+		trigger_enable[command_channel] &&
+		continuous_repeat[command_channel] &&
+		waiting_for_trigger[command_channel] &&
+		!amp_maintenance && !command_threshold_owned;
+	wire fire_eligible =
+		trigger_enable[command_channel] &&
+		manual_fire_trigger[command_channel] &&
+		!continuous_repeat[command_channel] &&
+		waiting_for_trigger[command_channel] &&
+		!amp_maintenance && !command_threshold_owned;
+
+	assign command_accepted = command_strobe && acquisition_running &&
+		((command_opcode == CMD_SEQUENCE_STOP) ||
+		 (command_opcode == CMD_CONTINUOUS_ON && continuous_start_eligible) ||
+		 (command_opcode == CMD_FIRE && fire_eligible));
 	
 	// Trigger selection
 	reg [15:0] trigger_in;
@@ -91,9 +132,11 @@ module digout_sequencer #(
 						trigger_on_edge[prog_channel] <= prog_word[5];
 						trigger_polarity[prog_channel] <= prog_word[6];
 						trigger_enable[prog_channel] <= prog_word[7];
+						manual_fire_trigger[prog_channel] <= prog_word[8];
 					end
 				1: begin
 						number_of_stim_pulses[prog_channel] <= prog_word[7:0];
+						continuous_repeat[prog_channel] <= prog_word[8];
 					end
 				4: event_start_stim[prog_channel] <= prog_word;
 				7: event_end_stim[prog_channel] <= prog_word;
@@ -109,24 +152,19 @@ module digout_sequencer #(
 	// State machine for stim sequencing
 	
 	always @(posedge dataclk) begin
-		if (reset) begin
+		if (reset || !acquisition_running) begin
 			digout <= 16'b0;
 			waiting_for_trigger <=16'hffff;
 			waiting_for_edge <=16'hffff;
-		end else if (amp_maintenance) begin
-			digout <= 16'b0;
+			continuous_running <= 16'b0;
+			fire_pending <= 16'b0;
 		end else begin
 			if (channel[5:4] == 2'b00) begin // only for channel = 0-15
 				case (main_state)
-					99: begin
-						if (reset_sequencer) begin
-							digout <= 16'b0;
-							waiting_for_trigger <=16'hffff;
-							waiting_for_edge <=16'hffff;						
-						end
-					end
 					102: begin
-						if (waiting_for_edge[addr] && waiting_for_trigger[addr] && trigger_on_edge[addr]) begin
+						if (waiting_for_edge[addr] && waiting_for_trigger[addr] &&
+							trigger_on_edge[addr] && !manual_fire_trigger[addr] &&
+							!continuous_repeat[addr]) begin
 							if (~trigger_in[addr]) begin
 								waiting_for_edge[addr] <= 1'b0;
 							end
@@ -134,7 +172,14 @@ module digout_sequencer #(
 						if (waiting_for_trigger[addr]) begin
 							counter[addr] <= 32'b0;
 							stim_counter[addr] <= number_of_stim_pulses[addr];
-							if (trigger_enable[addr] && trigger_in[addr] && (~trigger_on_edge[addr] || ~waiting_for_edge[addr])) begin
+							if (trigger_enable[addr] && manual_fire_trigger[addr] &&
+								!continuous_repeat[addr] && fire_pending[addr]) begin
+								waiting_for_trigger[addr] <= 1'b0;
+								fire_pending[addr] <= 1'b0;
+							end else if (trigger_enable[addr] &&
+								!manual_fire_trigger[addr] && !continuous_repeat[addr] &&
+								trigger_in[addr] &&
+								(~trigger_on_edge[addr] || ~waiting_for_edge[addr])) begin
 								waiting_for_trigger[addr] <= 1'b0;
 							end else begin
 								digout[addr] <= 1'b0;
@@ -159,25 +204,78 @@ module digout_sequencer #(
 					end
 					
 					114: begin
-						if (shutdown || amp_maintenance) begin
+						if (shutdown) begin
 							digout[addr] <= 1'b0;
 						end
 					end
 					
 					118: begin
-						if (event_repeat_stim[addr] == counter[addr] && stim_counter[addr] != 8'b0) begin
+						if (continuous_repeat[addr] && continuous_running[addr]) begin
+							if (counter[addr] + 1'b1 == event_repeat_stim[addr]) begin
+								// Continuous mode uses exact period semantics:
+								// start+period repeats after exactly period frames.
+								counter[addr] <= event_start_stim[addr];
+							end else begin
+								counter[addr] <= counter[addr] + 1;
+							end
+						end else if (event_repeat_stim[addr] == counter[addr] && stim_counter[addr] != 8'b0) begin
 							counter[addr] <= event_start_stim[addr];
 							stim_counter[addr] <= stim_counter[addr] - 1;
 						end else if (event_end[addr] == counter[addr] && stim_counter[addr] == 8'b0) begin
 							counter[addr] <= 32'b0;
 							waiting_for_trigger[addr] <= 1'b1;
 							waiting_for_edge[addr] <= trigger_on_edge[addr];
+							continuous_running[addr] <= 1'b0;
 						end else begin
 							counter[addr] <= counter[addr] + 1;
 						end
 					end
 					default: begin
 					
+					end
+				endcase
+			end
+
+			// Live commands have priority over a coincident sequencer state for
+			// the selected channel. Fire is retained until state 102 consumes it.
+			if (command_strobe) begin
+				case (command_opcode)
+					CMD_MANUAL_HIGH, CMD_MANUAL_LOW: begin
+						digout[command_channel] <= 1'b0;
+						counter[command_channel] <= 32'b0;
+						stim_counter[command_channel] <= 8'b0;
+						waiting_for_trigger[command_channel] <= 1'b1;
+						waiting_for_edge[command_channel] <=
+							trigger_on_edge[command_channel];
+						continuous_running[command_channel] <= 1'b0;
+						fire_pending[command_channel] <= 1'b0;
+					end
+					CMD_CONTINUOUS_ON: begin
+						if (continuous_start_eligible) begin
+							digout[command_channel] <= 1'b0;
+							counter[command_channel] <= 32'b0;
+							stim_counter[command_channel] <= 8'b0;
+							waiting_for_trigger[command_channel] <= 1'b0;
+							continuous_running[command_channel] <= 1'b1;
+							fire_pending[command_channel] <= 1'b0;
+						end
+					end
+					CMD_SEQUENCE_STOP: begin
+						digout[command_channel] <= 1'b0;
+						counter[command_channel] <= 32'b0;
+						stim_counter[command_channel] <= 8'b0;
+						waiting_for_trigger[command_channel] <= 1'b1;
+						waiting_for_edge[command_channel] <=
+							trigger_on_edge[command_channel];
+						continuous_running[command_channel] <= 1'b0;
+						fire_pending[command_channel] <= 1'b0;
+					end
+					CMD_FIRE: begin
+						if (fire_eligible) begin
+							fire_pending[command_channel] <= 1'b1;
+						end
+					end
+					default: begin
 					end
 				endcase
 			end
