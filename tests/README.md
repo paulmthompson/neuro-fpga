@@ -6,8 +6,32 @@ Run from the `neuro-fpga` repository root with Icarus Verilog (`iverilog` and `v
 bash tests/run-rhs-digout.sh
 ```
 
-On Ubuntu, `sudo apt install iverilog` installs both tools. The runner writes compiled output to a temporary directory and exits nonzero on a failed assertion. These are **module-level** tests of `RHS_Recording_Controller/XEM6010/digout_sequencer.v` and `digout_output_control.v`. The sequencer bench approximates the states/channels it receives from `main.v`; the output-control bench checks command decoding and source priority. They do not simulate Opal Kelly, the complete top-level design, USB transfers, or ISE 14.7 synthesis. Measure physical pins after building a matching bitfile.
+On Ubuntu, `sudo apt install iverilog` installs both tools. The runner writes compiled output to a temporary directory and exits nonzero on a failed assertion.
 
-The runner executes `rhs_digout_sequencer_tb.v` and `rhs_digout_output_control_tb.v`. The sequencer bench retains 1/2/3/256-pulse, edge/level, pulse-width, and shutdown regressions. Finite trains preserve their historical six-frame rise-to-rise interval for a programmed five-tick repeat. Continuous mode instead requires the requested five-frame period and tests per-channel Start/Stop, fresh restart, ignored external triggers, Manual Fire isolation/busy rejection/rearm, threshold ownership, acquisition Stop clearing, concurrent modes, and maintenance-transparent phase and edge counts. The shared amplifier/analog reset is intentionally absent from the digital module interface.
+## What these tests are for
 
-`rhs_digout_output_control_tb.v` checks the physical output foundation: commands are ignored and every source stays low while acquisition is stopped; during Run, independent manual pins, DAC-threshold priority, and sequencer outputs operate. It checks that Stop needs no USB command, an old manual high does not return on a later Run, rejected sequencer requests retain Manual Level ownership, and accepted Start/Stop/Fire actions release stale manual ownership.
+FPGA benches verify **in-contract** behavior: the host sends valid stream-16 programming (`programStimReg` / Step 4 `setDigitalOutSequenceParameters`) and valid live opcodes on WireIn `0x0e` + TriggerIn `0x41[2]`. They do **not** deliberately under-program the FPGA or leave factory-init event registers in place.
+
+Shared register images live in [`rhs_digout_host_programming.vh`](rhs_digout_host_programming.vh). Keep this file aligned with [`rhsdigoutconfiguration.cpp`](../../../Engine/Processing/rhsdigoutconfiguration.cpp) in the Intan-RHX tree (30 kHz nominal rate in sim).
+
+Host-only golden checks (no Verilog), from the **Intan-RHX** repository root:
+
+```sh
+bash tests/run-rhs-digout-host-golden.sh
+```
+
+Requires Qt5Core (`pkg-config Qt5Core`).
+
+## Benches
+
+| Bench | Scope |
+| --- | --- |
+| `rhs_digout_sequencer_tb.v` | `digout_sequencer.v` — pulse trains, continuous, Manual Fire, maintenance, Stop |
+| `rhs_digout_output_control_tb.v` | `digout_output_control.v` — mux, manual level, threshold, command acceptance |
+| `rhs_digout_integration_tb.v` | Both modules — **`ttl_out`**, manual prelude → Apply → Manual Fire; host Single/Continuous with **exact** high/period checks on **ttl_out[5] and ttl_out[3]** (DIGITAL-OUT-5 / DIGITAL-OUT-4) |
+
+The sequencer bench still includes **legacy** `configure_pin` / `configure_manual_fire_pin` helpers (finite-train repeat tick). New **host contract** cases use `rhs_digout_host_programming.vh` (Single pulse, `EventRepeatStim = Never`).
+
+**Waveform assertions:** `rhs_digout_sequencer_tb` checks finite pulse **counts** and **legacy** continuous period (repeat register = period ticks, start = 0). Only `rhs_digout_integration_tb` checks the **Step 4** continuous image (repeat = delay + period): each pulse high for `high_ticks` frames, rise-to-rise spacing `period_ticks` frames at 30 kHz. Host golden tests verify **register ticks only**, not `ttl_out` timing.
+
+They do not simulate Opal Kelly USB, the full top-level design, or ISE synthesis. Measure physical pins after building a matching bitfile.

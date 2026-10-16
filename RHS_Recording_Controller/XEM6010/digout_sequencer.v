@@ -172,7 +172,10 @@ module digout_sequencer #(
 						if (waiting_for_trigger[addr]) begin
 							counter[addr] <= 32'b0;
 							stim_counter[addr] <= number_of_stim_pulses[addr];
-							if (trigger_enable[addr] && manual_fire_trigger[addr] &&
+							if (trigger_enable[addr] && continuous_repeat[addr] &&
+								continuous_running[addr]) begin
+								waiting_for_trigger[addr] <= 1'b0;
+							end else if (trigger_enable[addr] && manual_fire_trigger[addr] &&
 								!continuous_repeat[addr] && fire_pending[addr]) begin
 								waiting_for_trigger[addr] <= 1'b0;
 								fire_pending[addr] <= 1'b0;
@@ -237,13 +240,12 @@ module digout_sequencer #(
 			end
 
 			// Live commands have priority over a coincident sequencer state for
-			// the selected channel. Fire is retained until state 102 consumes it.
+			// the selected channel. Continuous Start and Fire are retained until
+			// state 102 resets counter[addr] and consumes the start transition.
 			if (command_strobe) begin
 				case (command_opcode)
 					CMD_MANUAL_HIGH, CMD_MANUAL_LOW: begin
 						digout[command_channel] <= 1'b0;
-						counter[command_channel] <= 32'b0;
-						stim_counter[command_channel] <= 8'b0;
 						waiting_for_trigger[command_channel] <= 1'b1;
 						waiting_for_edge[command_channel] <=
 							trigger_on_edge[command_channel];
@@ -253,17 +255,12 @@ module digout_sequencer #(
 					CMD_CONTINUOUS_ON: begin
 						if (continuous_start_eligible) begin
 							digout[command_channel] <= 1'b0;
-							counter[command_channel] <= 32'b0;
-							stim_counter[command_channel] <= 8'b0;
-							waiting_for_trigger[command_channel] <= 1'b0;
 							continuous_running[command_channel] <= 1'b1;
 							fire_pending[command_channel] <= 1'b0;
 						end
 					end
 					CMD_SEQUENCE_STOP: begin
 						digout[command_channel] <= 1'b0;
-						counter[command_channel] <= 32'b0;
-						stim_counter[command_channel] <= 8'b0;
 						waiting_for_trigger[command_channel] <= 1'b1;
 						waiting_for_edge[command_channel] <=
 							trigger_on_edge[command_channel];

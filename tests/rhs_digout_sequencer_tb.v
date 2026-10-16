@@ -1,8 +1,13 @@
 `timescale 1ns / 1ps
 
-// Standalone, self-checking baseline for the unmodified RHS digital sequencer.
+// Standalone, self-checking baseline for the RHS digital sequencer.
 // Emulates the main.v states used by this module, one state per dataclk edge and
 // 20 channels per sampling frame.
+//
+// configure_pin / configure_manual_fire_pin use historical finite-train repeat
+// timing (event_repeat = start + period). Step 4 host Single-pulse programming
+// uses EventRepeatStim = Never; see rhs_digout_host_programming.vh and the
+// integration bench for the in-contract host register image.
 module rhs_digout_sequencer_tb;
     reg reset = 1'b1;
     reg dataclk = 1'b0;
@@ -164,6 +169,7 @@ module rhs_digout_sequencer_tb;
         end
     endtask
 
+    // Legacy finite-train style (repeat at start+period). Not Step 4 Single host contract.
     task configure_manual_fire_pin;
         input [3:0] ch;
         input [7:0] additional_pulses;
@@ -179,6 +185,8 @@ module rhs_digout_sequencer_tb;
             program_reg(ch, 13, width + 2);
         end
     endtask
+
+    `include "rhs_digout_host_programming.vh"
 
     task live_command;
         input [2:0] opcode;
@@ -341,8 +349,19 @@ module rhs_digout_sequencer_tb;
         check(accepted && digout[7] === 1'b0, "Stop during low phase failed");
         $display("PASS: continuous Start/Stop/restart and exact period");
 
-        // Manual Fire is exclusive from external triggers, retained until the
-        // channel slot consumes it, and ignored rather than queued while busy.
+        // Step 4 host contract: Single pulse + Manual Fire (Never repeat).
+        rhs_digout_program_single_manual_fire(30000, 4'd13, 0, 100, 1000, 1'b1);
+        repeat (2) sample_frame();
+        live_command(4, 13, accepted);
+        check(accepted, "host Single Manual Fire was rejected");
+        repeat (20) sample_frame();
+        check(rises[13] == 1 && falls[13] == 1,
+              "host Single Manual Fire pulse count incorrect");
+        check(digout[13] === 1'b0, "host Single Manual Fire did not end low");
+        $display("PASS: host Single Manual Fire (Never repeat)");
+
+        // Manual Fire finite train (legacy repeat timing), exclusive from external
+        // triggers, retained until consumed, ignored while busy.
         configure_manual_fire_pin(8, 1, 2, 5);
         repeat (3) sample_frame();
         check(rises[8] == 0, "external trigger started Manual Fire mode");
@@ -421,13 +440,13 @@ module rhs_digout_sequencer_tb;
         // Independent software modes may run together. Manual source commands
         // disarm only their selected sequencer channel.
         configure_continuous_pin(11, 1, 4);
-        configure_manual_fire_pin(12, 0, 2, 5);
+        rhs_digout_program_single_manual_fire(30000, 4'd12, 0, 100, 1000, 1'b1);
         live_command(2, 11, accepted);
         live_command(4, 12, accepted);
         repeat (12) sample_frame();
         check(rises[11] >= 3, "independent continuous channel failed");
         check(rises[12] == 1 && falls[12] == 1,
-              "independent Manual Fire channel failed");
+              "independent host Single Manual Fire failed");
         while (digout[11] !== 1'b1) sample_frame();
         live_command(0, 11, accepted);
         check(digout[11] === 1'b0, "Manual source did not disarm sequencer");
