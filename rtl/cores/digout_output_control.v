@@ -1,4 +1,5 @@
 `timescale 1ns / 1ps
+`default_nettype none
 
 // RHS board TTL source selection and live output controls. The host sends a
 // channel/opcode on WireIn 0x0e, then strobes TriggerIn 0x41[2] (dataclk).
@@ -25,11 +26,11 @@ module digout_output_control (
     input wire [15:0] sequencer_out,
     output wire [15:0] ttl_out
 );
-    localparam CMD_MANUAL_HIGH   = 3'd0;
-    localparam CMD_MANUAL_LOW    = 3'd1;
-    localparam CMD_CONTINUOUS_ON = 3'd2;
-    localparam CMD_SEQUENCE_STOP = 3'd3;
-    localparam CMD_FIRE          = 3'd4;
+    localparam [2:0] CMD_MANUAL_HIGH   = 3'd0;
+    localparam [2:0] CMD_MANUAL_LOW    = 3'd1;
+    localparam [2:0] CMD_CONTINUOUS_ON = 3'd2;
+    localparam [2:0] CMD_SEQUENCE_STOP = 3'd3;
+    localparam [2:0] CMD_FIRE          = 3'd4;
 
     reg [15:0] manual_source;
     reg [15:0] manual_level;
@@ -82,3 +83,5 @@ module digout_output_control (
         end
     end
 endmodule
+
+`default_nettype wire

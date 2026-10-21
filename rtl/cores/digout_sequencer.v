@@ -1,4 +1,19 @@
 `timescale 1ns / 1ps
+`default_nettype none
+
+/**
+ * @module digout_sequencer
+ * @brief Programmable pulse sequences for 16 digital outputs (TDM on main_state).
+ *
+ * @param MODULE Hardware module ID matched against prog_module on programming writes.
+ * @param ENABLE_EXTENDED_COMMANDS 1 = RHS (live commands, continuous mode); 0 = RHD legacy.
+ *
+ * @pre prog_channel, prog_address, prog_word, and prog_module are stable before each
+ *      host ActivateTriggerIn on endpoint 0x42 bit 1 (prog_trig).
+ * @pre command_strobe is a single-cycle pulse on dataclk while acquisition_running.
+ * @post Config registers latch on prog_trig; digout
+ *       clears on reset or when RHS acquisition_running is low.
+ */
 //////////////////////////////////////////////////////////////////////////////////
 // Shared digital-output sequencer (RHD legacy + RHS extended via ENABLE_EXTENDED_COMMANDS).
 // Optional paths are selected at elaboration time (generate), not runtime if (parameter).
@@ -6,7 +21,7 @@
 
 module digout_sequencer #(
 	parameter MODULE = 0,
-	parameter integer ENABLE_EXTENDED_COMMANDS = 1
+	parameter [0:0] ENABLE_EXTENDED_COMMANDS = 1'b1
 	)
 	(
 	input wire			reset,
@@ -53,32 +68,35 @@ module digout_sequencer #(
 
 	assign digout_enabled = trigger_enable;
 
-	localparam CMD_MANUAL_HIGH   = 3'd0;
-	localparam CMD_MANUAL_LOW    = 3'd1;
-	localparam CMD_CONTINUOUS_ON = 3'd2;
-	localparam CMD_SEQUENCE_STOP = 3'd3;
-	localparam CMD_FIRE          = 3'd4;
+	localparam [2:0] CMD_MANUAL_HIGH   = 3'd0;
+	localparam [2:0] CMD_MANUAL_LOW    = 3'd1;
+	localparam [2:0] CMD_CONTINUOUS_ON = 3'd2;
+	localparam [2:0] CMD_SEQUENCE_STOP = 3'd3;
+	localparam [2:0] CMD_FIRE          = 3'd4;
+
+	localparam [31:0] STATE_SYNC_A     = 32'd99;
+	localparam [31:0] STATE_SYNC_B     = 32'd100;
+	localparam [31:0] STATE_EVAL_TRIG  = 32'd102;
+	localparam [31:0] STATE_PULSE_ON   = 32'd106;
+	localparam [31:0] STATE_PULSE_OFF  = 32'd110;
+	localparam [31:0] STATE_SHUTDOWN = 32'd114;
+	localparam [31:0] STATE_ADVANCE   = 32'd118;
+
+	localparam [3:0] REG_TRIG_CFG    = 4'd0;
+	localparam [3:0] REG_PULSE_CFG   = 4'd1;
+	localparam [3:0] REG_START_STIM  = 4'd4;
+	localparam [3:0] REG_END_STIM    = 4'd7;
+	localparam [3:0] REG_REPEAT_STIM = 4'd8;
+	localparam [3:0] REG_EVENT_END   = 4'd13;
 
 	reg [15:0] trigger_in;
+	integer trig_i;
 
 	always @(posedge dataclk) begin
-		if (channel == 0 && (main_state == 99 || main_state == 100)) begin
-			trigger_in[0] <= triggers[trigger_source[0]] ^ trigger_polarity[0];
-			trigger_in[1] <= triggers[trigger_source[1]] ^ trigger_polarity[1];
-			trigger_in[2] <= triggers[trigger_source[2]] ^ trigger_polarity[2];
-			trigger_in[3] <= triggers[trigger_source[3]] ^ trigger_polarity[3];
-			trigger_in[4] <= triggers[trigger_source[4]] ^ trigger_polarity[4];
-			trigger_in[5] <= triggers[trigger_source[5]] ^ trigger_polarity[5];
-			trigger_in[6] <= triggers[trigger_source[6]] ^ trigger_polarity[6];
-			trigger_in[7] <= triggers[trigger_source[7]] ^ trigger_polarity[7];
-			trigger_in[8] <= triggers[trigger_source[8]] ^ trigger_polarity[8];
-			trigger_in[9] <= triggers[trigger_source[9]] ^ trigger_polarity[9];
-			trigger_in[10] <= triggers[trigger_source[10]] ^ trigger_polarity[10];
-			trigger_in[11] <= triggers[trigger_source[11]] ^ trigger_polarity[11];
-			trigger_in[12] <= triggers[trigger_source[12]] ^ trigger_polarity[12];
-			trigger_in[13] <= triggers[trigger_source[13]] ^ trigger_polarity[13];
-			trigger_in[14] <= triggers[trigger_source[14]] ^ trigger_polarity[14];
-			trigger_in[15] <= triggers[trigger_source[15]] ^ trigger_polarity[15];
+		if (channel == 0 && (main_state == STATE_SYNC_A || main_state == STATE_SYNC_B)) begin
+			for (trig_i = 0; trig_i < 16; trig_i = trig_i + 1) begin
+				trigger_in[trig_i] <= triggers[trigger_source[trig_i]] ^ trigger_polarity[trig_i];
+			end
 		end
 	end
 
@@ -86,7 +104,7 @@ module digout_sequencer #(
 	assign addr = channel[3:0];
 
 	generate
-		if (ENABLE_EXTENDED_COMMANDS != 0) begin : gen_rhs
+		if (ENABLE_EXTENDED_COMMANDS) begin : gen_rhs
 
 			wire [3:0] command_channel = command_word[3:0];
 			wire [2:0] command_opcode = command_word[6:4];
@@ -113,21 +131,23 @@ module digout_sequencer #(
 			always @(posedge prog_trig) begin
 				if (prog_module == MODULE) begin
 					case (prog_address)
-						0: begin
+						REG_TRIG_CFG: begin
 							trigger_source[prog_channel] <= prog_word[4:0];
 							trigger_on_edge[prog_channel] <= prog_word[5];
 							trigger_polarity[prog_channel] <= prog_word[6];
 							trigger_enable[prog_channel] <= prog_word[7];
 							manual_fire_trigger[prog_channel] <= prog_word[8];
 						end
-						1: begin
+						REG_PULSE_CFG: begin
 							number_of_stim_pulses[prog_channel] <= prog_word[7:0];
 							continuous_repeat[prog_channel] <= prog_word[8];
 						end
-						4: event_start_stim[prog_channel] <= prog_word;
-						7: event_end_stim[prog_channel] <= prog_word;
-						8: event_repeat_stim[prog_channel] <= prog_word;
-						13: event_end[prog_channel] <= prog_word;
+						REG_START_STIM: event_start_stim[prog_channel] <= prog_word;
+						REG_END_STIM: event_end_stim[prog_channel] <= prog_word;
+						REG_REPEAT_STIM: event_repeat_stim[prog_channel] <= prog_word;
+						REG_EVENT_END: event_end[prog_channel] <= prog_word;
+						default: begin
+						end
 					endcase
 				end
 			end
@@ -142,7 +162,7 @@ module digout_sequencer #(
 				end else begin
 					if (channel[5:4] == 2'b00) begin
 						case (main_state)
-							102: begin
+							STATE_EVAL_TRIG: begin
 								if (waiting_for_edge[addr] && waiting_for_trigger[addr] &&
 									trigger_on_edge[addr] && !manual_fire_trigger[addr] &&
 									!continuous_repeat[addr]) begin
@@ -171,7 +191,7 @@ module digout_sequencer #(
 								end
 							end
 
-							106: begin
+							STATE_PULSE_ON: begin
 								if (~waiting_for_trigger[addr]) begin
 									if (event_start_stim[addr] == counter[addr]) begin
 										digout[addr] <= 1'b1;
@@ -179,7 +199,7 @@ module digout_sequencer #(
 								end
 							end
 
-							110: begin
+							STATE_PULSE_OFF: begin
 								if (~waiting_for_trigger[addr]) begin
 									if (event_end_stim[addr] == counter[addr]) begin
 										digout[addr] <= 1'b0;
@@ -187,13 +207,13 @@ module digout_sequencer #(
 								end
 							end
 
-							114: begin
+							STATE_SHUTDOWN: begin
 								if (shutdown) begin
 									digout[addr] <= 1'b0;
 								end
 							end
 
-							118: begin
+							STATE_ADVANCE: begin
 								if (continuous_repeat[addr] && continuous_running[addr]) begin
 									if (counter[addr] + 1'b1 == event_repeat_stim[addr]) begin
 										counter[addr] <= event_start_stim[addr];
@@ -361,3 +381,5 @@ module digout_sequencer #(
 	endgenerate
 
 endmodule
+
+`default_nettype wire
