@@ -10,5 +10,35 @@ https://github.com/paulmthompson/Intan-RHX
 
 Stimulation parameters like pulse duration, delay etc were communicated to the FPGA with 16-bit numbers. This limited the maximum value to be very short (~ 5ms). The fpga was modified to accept 32-bit unsigned integers, allowing for significantly longer stimulation values (10s is now set as maximum duration for these values instead of 5 ms). The GUI was updated to accomodate these limits.
 
+## Building bitstreams (FuseSoC + ISE 14.7)
+
+Prerequisites: [uv](https://docs.astral.sh/uv/), Xilinx ISE 14.7 (`xtclsh` on `PATH`, or set `XILINX_ISE_SETTINGS` to `settings64.sh`).
+
+```sh
+cd FPGA-bitfiles/neuro-fpga   # or clone neuro-fpga repo root
+uv sync
+uv run fusesoc list-cores
+```
+
+RHS (XEM6010):
+
+```sh
+export XILINX_ISE_SETTINGS=/path/to/Xilinx/14.7/ISE_DS/settings64.sh   # if needed
+source /path/to/Xilinx/14.7/ISE_DS/settings64.sh
+bash scripts/fuse-build.sh rhs
+# Logs xtclsh/ISE output to the terminal and build/rhs-xem6010/fuse-build.log (uses fusesoc --verbose).
+# or: uv run fusesoc --verbose run --work-root=build/rhs-xem6010 --target=bitstream paulmthompson:neuro-fpga:rhs_xem6010:0.1.0
+```
+
+RHD (XEM6310):
+
+```sh
+bash scripts/fuse-build.sh rhd
+```
+
+Expected artifact: `build/<rhs-xem6010|rhd-xem6310>/main.bit`.
+
+RTL simulation (no ISE): see [tests/README.md](tests/README.md).
+
 ## Future Directions
 

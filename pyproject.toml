@@ -1,0 +1,10 @@
+[project]
+name = "neuro-fpga"
+version = "0.1.0"
+description = "FuseSoC build tooling for Intan neuro-fpga bitstreams"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    # PyPI package "fusesoc" is 2.x (CAPI2 cores, Edalize ISE backend).
+    "fusesoc>=2.4.6",
+]

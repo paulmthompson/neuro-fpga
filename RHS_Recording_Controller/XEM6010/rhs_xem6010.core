@@ -1,0 +1,82 @@
+CAPI=2:
+name: paulmthompson:neuro-fpga:rhs_xem6010:0.1.0
+description: RHS2000 recording controller for Opal Kelly XEM6010 (Xilinx Spartan-6 xc6slx45)
+
+filesets:
+  ise_ngc:
+    files:
+      - ise_add_ngc.tcl: {file_type: tclSource}
+
+  ngc_netlists:
+    file_type: user
+    files:
+      - fifo_w16_2048_r64_512.ngc
+      - fifo_w64_512_r16_2048.ngc
+      - multiplier_18x18.ngc
+      - multiplier.ngc
+      - okBTPipeIn.ngc
+      - okBTPipeOut.ngc
+      - okCoreHarness.ngc
+      - okPipeIn.ngc
+      - okPipeOut.ngc
+      - okTriggerIn.ngc
+      - okTriggerOut.ngc
+      - okWireIn.ngc
+      - okWireOut.ngc
+      - TFIFO64x8a_64x8b.ngc
+
+  rtl:
+    file_type: verilogSource
+    files:
+      - DAC_output.v
+      - DAC_output_scalable.v
+      - iodrp_mcb_controller.v
+      - iodrp_controller.v
+      - mcb_soft_calibration.v
+      - mcb_soft_calibration_top.v
+      - mcb_raw_wrapper.v
+      - RAM_block.v
+      - multiplier_18x18.v
+      - memc3_wrapper.v
+      - memc3_infrastructure.v
+      - fifo_w64_512_r16_2048.v
+      - fifo_w16_2048_r64_512.v
+      - ddr2_state_machine.v
+      - variable_freq_clk_generator.v
+      - stim_sequencer.v
+      - SDRAM_FIFO.v
+      - RAM_bank.v
+      - okLibrary.v
+      - MISO_phase_selector.v
+      - digout_output_control.v
+      - digout_sequencer.v
+      - digital_input_deserializer.v
+      - DAC_output_scalable_HPF.v
+      - analog_out_sequencer.v
+      - ADC_input.v
+      - main.v
+      - stim_program_ram.v
+
+  constraints:
+    files:
+      - xem6010.ucf: {file_type: UCF}
+
+targets:
+  default: &default
+    filesets:
+      - ise_ngc
+      - ngc_netlists
+      - rtl
+      - constraints
+    toplevel: main
+
+  bitstream:
+    <<: *default
+    description: Synthesize and generate main.bit with Xilinx ISE 14.7
+    default_tool: ise
+    tools:
+      ise:
+        family: spartan6
+        device: xc6slx45
+        package: fgg484
+        speed: "-2"

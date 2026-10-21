@@ -1,3 +1,8 @@
+.venv/
+build/
+**/fuse-build.log
+
+**/main.ngc
 
 **/_ngo
 **/_xmsgs
