@@ -2931,10 +2931,18 @@ module main #(
 	
 	wire [15:0] digout_sequencer, digout_sequencer_enabled, TTL_out_DAC_thres;
 	
-	digout_sequencer #(16) digout_sequencer_1 (.reset(reset), .dataclk(dataclk), .main_state(main_state), .channel(channel),
+	wire digout_command_accepted_unused;
+
+	digout_sequencer #(
+		.MODULE(16),
+		.ENABLE_EXTENDED_COMMANDS(1'b0)
+	) digout_sequencer_1 (.reset(reset), .dataclk(dataclk), .main_state(main_state), .channel(channel),
 		.prog_channel(prog_channel), .prog_address(prog_address), .prog_module(prog_module), .prog_word(prog_word), .prog_trig(prog_trig),
-		.triggers(triggers), .digout(digout_sequencer), .digout_enabled(digout_sequencer_enabled), .shutdown(shutdown),
-		.reset_sequencer(reset_sequencers));
+		.triggers(triggers),
+		.command_strobe(1'b0), .command_word(7'b0), .acquisition_running(1'b1), .threshold_mode(8'b0),
+		.digout(digout_sequencer), .digout_enabled(digout_sequencer_enabled),
+		.command_accepted(digout_command_accepted_unused),
+		.shutdown(shutdown), .reset_sequencer(reset_sequencers), .amp_maintenance(1'b0));
 
 	assign TTL_out_DAC_thres = { 8'b00000000, DAC_thresh_out };
 	

@@ -50,7 +50,7 @@ module rhs_digout_sequencer_tb;
         .acquisition_running(acquisition_running), .threshold_mode(threshold_mode),
         .digout(digout), .digout_enabled(digout_enabled),
         .command_accepted(command_accepted),
-        .shutdown(shutdown), .amp_maintenance(amp_maintenance)
+        .shutdown(shutdown), .reset_sequencer(1'b0), .amp_maintenance(amp_maintenance)
     );
 
     // Check all 16 pins after every clock, not only at expected transitions.

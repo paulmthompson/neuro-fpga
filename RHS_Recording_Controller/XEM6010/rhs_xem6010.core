@@ -26,6 +26,8 @@ filesets:
       - TFIFO64x8a_64x8b.ngc
 
   rtl:
+    depend:
+      - paulmthompson:neuro-fpga:rhythm_shared:0.1.0
     file_type: verilogSource
     files:
       - DAC_output.v
@@ -48,8 +50,6 @@ filesets:
       - RAM_bank.v
       - okLibrary.v
       - MISO_phase_selector.v
-      - digout_output_control.v
-      - digout_sequencer.v
       - digital_input_deserializer.v
       - DAC_output_scalable_HPF.v
       - analog_out_sequencer.v

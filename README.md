@@ -42,3 +42,5 @@ RTL simulation (no ISE): see [tests/README.md](tests/README.md).
 
 ## Future Directions
 
+
+Shared digital-output RTL lives under [`rtl/cores/`](rtl/cores/) (`digout_sequencer.v`, `digout_output_control.v`), built via FuseSoC core `paulmthompson:neuro-fpga:rhythm_shared:0.1.0`. RHD uses `ENABLE_EXTENDED_COMMANDS=0` on the sequencer only; RHS uses extended commands plus `digout_output_control`.

@@ -1,0 +1,15 @@
+CAPI=2:
+name: paulmthompson:neuro-fpga:rhythm_shared:0.1.0
+description: Shared Intan rhythm digital-output RTL (sequencer and RHS output mux)
+
+filesets:
+  digout:
+    file_type: verilogSource
+    files:
+      - digout_sequencer.v
+      - digout_output_control.v
+
+targets:
+  default:
+    filesets:
+      - digout

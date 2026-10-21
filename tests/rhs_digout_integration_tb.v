@@ -56,7 +56,7 @@ module rhs_digout_integration_tb;
         .acquisition_running(acquisition_running), .threshold_mode(threshold_mode),
         .digout(digout_sequencer_out), .digout_enabled(digout_enabled),
         .command_accepted(command_accepted),
-        .shutdown(shutdown), .amp_maintenance(amp_maintenance)
+        .shutdown(shutdown), .reset_sequencer(1'b0), .amp_maintenance(amp_maintenance)
     );
 
     digout_output_control digout_output_control_inst (

@@ -3420,13 +3420,16 @@ module main #(
 	
 	// Unlike amplifier and analog sequencers above, digital outputs do not
 	// receive reset_sequencers or maintenance gating.
-	digout_sequencer #(16) digout_sequencer_1 (.reset(reset), .dataclk(dataclk), .main_state(main_state), .channel(channel),
+	digout_sequencer #(
+		.MODULE(16),
+		.ENABLE_EXTENDED_COMMANDS(1'b1)
+	) digout_sequencer_1 (.reset(reset), .dataclk(dataclk), .main_state(main_state), .channel(channel),
 		.prog_channel(prog_channel), .prog_address(prog_address), .prog_module(prog_module), .prog_word(prog_word), .prog_trig(prog_trig),
 		.triggers(triggers), .command_strobe(digout_command_strobe), .command_word(ep0ewirein[6:0]),
 		.acquisition_running(SPI_running), .threshold_mode(TTL_out_mode),
 		.digout(digout_sequencer), .digout_enabled(digout_sequencer_enabled),
 		.command_accepted(digout_command_accepted), .shutdown(shutdown),
-		.amp_maintenance(amp_maintenance));
+		.reset_sequencer(1'b0), .amp_maintenance(amp_maintenance));
 
 	// Physical pin priority (also reflected in recorded TTL_out_direct):
 	// reset -> low; manual level for non-threshold pins; threshold on 1-8;
