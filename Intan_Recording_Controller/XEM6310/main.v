@@ -584,8 +584,8 @@ module main #(
 
    assign data_stream_en_in = 		ep14wirein;
    
-	//ep15 unused - PMT
-	
+	// ep15[6:0] carries digital-output live commands (see digout_command_strobe).
+
 	// Can we assign this more efficiently like we do with digital outputs?
 	assign DAC_channel_sel_1 = 		ep16wirein[4:0];
 	assign DAC_stream_sel_1 = 			ep16wirein[10:5];
@@ -676,6 +676,10 @@ module main #(
 	assign SPI_start = 					ep41trigin[0];
 	assign reset_sequencers = ep41trigin[1];
 
+	// RHD board TTL command: WireIn 0x15 channel/opcode, then TriggerIn 0x41[2].
+	// Host updates WireIn before the dataclk-domain trigger. WireOut 0x27 = 0x4453
+	// ('DS') identifies this protocol to the matching host (board ID 700).
+	wire digout_command_strobe = ep41trigin[2];
 
 	always @(posedge ep42trigin[0]) begin
 		DAC_thresh_1 <= 					ep1fwirein[15:0];
@@ -803,7 +807,7 @@ module main #(
 
 	// Unused; future expansion
 	assign ep26wireout = 				32'h00000000;
-	assign ep27wireout = 				32'h00000000;
+	assign ep27wireout = 				{ 16'b0, 16'h4453 };
 	assign ep28wireout = 				32'h00000000;
 	assign ep29wireout = 				32'h00000000;
 	assign ep2awireout = 				32'h00000000;
@@ -2923,38 +2927,39 @@ module main #(
 		.serial_in(TTL_in_serial), .serial_in_exp(TTL_in_serial_exp), .TTL_in_direct_1(TTL_in_direct_1), .TTL_in_direct_2(TTL_in_direct_2),
 		.serial_CLK(serial_CLK_auto), .serial_LOAD(serial_LOAD_auto), .TTL_parallel(TTL_parallel), .TTL_parallel_exp(TTL_in));
 		
-	//Digital Output Control
-	
+	// Digital Output Control
 
 	wire [31:0] triggers;
 	assign triggers = {manual_triggers[7:0], ADC_triggers, TTL_in };
-	
-	wire [15:0] digout_sequencer, digout_sequencer_enabled, TTL_out_DAC_thres;
-	
-	wire digout_command_accepted_unused;
 
+	wire [15:0] digout_sequencer, digout_sequencer_enabled;
+	wire [15:0] digout_ttl_source;
+	wire digout_command_accepted;
+
+	// Unlike amplifier sequencers, digital outputs do not receive reset_sequencers.
 	digout_sequencer #(
 		.MODULE(16),
-		.ENABLE_EXTENDED_COMMANDS(1'b0)
+		.ENABLE_EXTENDED_COMMANDS(1'b1)
 	) digout_sequencer_1 (.reset(reset), .dataclk(dataclk), .main_state(main_state), .channel(channel),
 		.prog_channel(prog_channel), .prog_address(prog_address), .prog_module(prog_module), .prog_word(prog_word), .prog_trig(prog_trig),
-		.triggers(triggers),
-		.command_strobe(1'b0), .command_word(7'b0), .acquisition_running(1'b1), .threshold_mode(8'b0),
+		.triggers(triggers), .command_strobe(digout_command_strobe), .command_word(ep15wirein[6:0]),
+		.acquisition_running(SPI_running), .threshold_mode(TTL_out_mode),
 		.digout(digout_sequencer), .digout_enabled(digout_sequencer_enabled),
-		.command_accepted(digout_command_accepted_unused),
-		.shutdown(shutdown), .reset_sequencer(reset_sequencers), .amp_maintenance(1'b0));
+		.command_accepted(digout_command_accepted), .shutdown(shutdown),
+		.reset_sequencer(1'b0), .amp_maintenance(1'b0));
 
-	assign TTL_out_DAC_thres = { 8'b00000000, DAC_thresh_out };
-	
-	assign TTL_out_direct[0] = TTL_out_mode[0] ? manual_triggers[0] : digout_sequencer[0];
-	assign TTL_out_direct[1] = TTL_out_mode[1] ? manual_triggers[1] : digout_sequencer[1];
-	assign TTL_out_direct[2] = TTL_out_mode[2] ? manual_triggers[2] : digout_sequencer[2];
-	assign TTL_out_direct[3] = TTL_out_mode[3] ? manual_triggers[3] : digout_sequencer[3];
-	assign TTL_out_direct[4] = TTL_out_mode[4] ? TTL_out_DAC_thres[4] : digout_sequencer[4];
-	assign TTL_out_direct[5] = TTL_out_mode[5] ? TTL_out_DAC_thres[5] : digout_sequencer[5];
-	assign TTL_out_direct[6] = TTL_out_mode[6] ? TTL_out_DAC_thres[6] : digout_sequencer[6];
-	assign TTL_out_direct[7] = TTL_out_mode[7] ? TTL_out_DAC_thres[7] : digout_sequencer[7];
-	assign TTL_out_direct[15:8] = digout_sequencer[15:8];
+	// Physical pin priority (also reflected in recorded TTL_out_direct):
+	// reset -> low; manual level for non-threshold pins; threshold on 1-8;
+	// otherwise sequencer when acquisition is running and rearmed.
+	digout_output_control digout_output_control_1 (
+		.dataclk(dataclk), .reset(reset),
+		.command_strobe(digout_command_strobe),
+		.sequencer_command_accepted(digout_command_accepted),
+		.command_word(ep15wirein[6:0]),
+		.acquisition_running(SPI_running), .threshold_mode(TTL_out_mode),
+		.threshold_out(DAC_thresh_out), .sequencer_out(digout_sequencer),
+		.ttl_out(digout_ttl_source));
+	assign TTL_out_direct = digout_ttl_source;
 
 	// Evaluation board 16-bit DAC outputs
 

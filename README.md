@@ -43,4 +43,4 @@ RTL simulation (no ISE): see [tests/README.md](tests/README.md).
 ## Future Directions
 
 
-Shared digital-output RTL lives under [`rtl/cores/`](rtl/cores/) (`digout_sequencer.v`, `digout_output_control.v`), built via FuseSoC core `paulmthompson:neuro-fpga:rhythm_shared:0.1.0`. RHD uses `ENABLE_EXTENDED_COMMANDS=0` on the sequencer only; RHS uses extended commands plus `digout_output_control`.
+Shared digital-output RTL lives under [`rtl/cores/`](rtl/cores/) (`digout_sequencer.v`, `digout_output_control.v`), built via FuseSoC core `paulmthompson:neuro-fpga:rhythm_shared:0.1.0`. RHS uses WireIn `0x0e` and TriggerIn `0x41[2]` for live commands; RHD (XEM6310) uses WireIn `0x15` and the same trigger bit, with WireOut `0x27 = 0x4453` on both boards.
