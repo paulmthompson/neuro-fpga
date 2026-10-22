@@ -379,6 +379,7 @@ module main #(
 	wire [15:0]		data_stream_ADC_1, data_stream_ADC_2, data_stream_ADC_3, data_stream_ADC_4;
 	wire [15:0]		data_stream_ADC_5, data_stream_ADC_6, data_stream_ADC_7, data_stream_ADC_8;
 	reg [7:0] ADC_triggers;
+	wire [15:0] ADC_threshold;
 	wire [7:0]				TTL_out_mode;
 	
 	wire				reset, SPI_start, SPI_run_continuous;
@@ -584,7 +585,8 @@ module main #(
 
    assign data_stream_en_in = 		ep14wirein;
    
-	// ep15[6:0] carries digital-output live commands (see digout_command_strobe).
+	// ep15[6:0] live digout commands (digout_command_strobe); ep15[31:16] analog comparator threshold.
+	assign ADC_threshold = ep15wirein[31:16];
 
 	// Can we assign this more efficiently like we do with digital outputs?
 	assign DAC_channel_sel_1 = 		ep16wirein[4:0];
@@ -1146,7 +1148,7 @@ module main #(
 			MOSI <= 8'b0;
 			FIFO_data_in <= 16'b0;
 			FIFO_write_to <= 1'b0;
-			ADC_triggers <= 1'b0;
+			ADC_triggers <= 8'b0;
 			shutdown <= 1'b0;
 		end else begin
 			CS_b <= 1'b0;
@@ -2682,6 +2684,14 @@ module main #(
 					if (channel == 34 && ~shutdown) begin
 						FIFO_data_in <= data_stream_ADC_8;	// Write evaluation-board ADC samples
 						FIFO_write_to <= 1'b1;
+						ADC_triggers[0] <= (data_stream_ADC_1 > ADC_threshold);
+						ADC_triggers[1] <= (data_stream_ADC_2 > ADC_threshold);
+						ADC_triggers[2] <= (data_stream_ADC_3 > ADC_threshold);
+						ADC_triggers[3] <= (data_stream_ADC_4 > ADC_threshold);
+						ADC_triggers[4] <= (data_stream_ADC_5 > ADC_threshold);
+						ADC_triggers[5] <= (data_stream_ADC_6 > ADC_threshold);
+						ADC_triggers[6] <= (data_stream_ADC_7 > ADC_threshold);
+						ADC_triggers[7] <= (data_stream_ADC_8 > ADC_threshold);
 					end					
 
 					CS_b <= 1'b1;
